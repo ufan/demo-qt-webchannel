@@ -34,7 +34,7 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
-    setFixedSize(480, 300);
+    //setFixedSize(480, 300);
     setWindowTitle("Demo: Qt WebChannel");
 
     ChartView *chartView = new ChartView();

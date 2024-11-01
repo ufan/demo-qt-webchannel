@@ -1,6 +1,6 @@
 <html>
 <head>
-<script type="text/javascript" src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script type="text/javascript" src="qrc:///qwebchannel.js"></script>
 <script type="text/javascript" src="qrc:///Chart.min.js"></script>
 </head>
 <body>
@@ -32,7 +32,7 @@
 
     var updateChart = function(data) {
         for (i = 0; i < data.length; i++) {
-            window.myBar.datasets[0].bars[i].value = data[i];
+            window.myBar.datasets[1].bars[i].value = data[i];
         }
         window.myBar.update();
     }

@@ -2,5 +2,6 @@
     <qresource prefix="/">
         <file>Chart.min.js</file>
         <file>index.html</file>
+        <file>qwebchannel.js</file>
     </qresource>
 </RCC>
