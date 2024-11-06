@@ -6,8 +6,8 @@ import jianwei.com
 
 ApplicationWindow {
     id: app
-    height: 1300
-    width: 1300
+    height: 1000
+    width: 700
     visible: true
 
     DataSource {
@@ -22,7 +22,7 @@ ApplicationWindow {
 
     WebEngineView {
         id: webview1
-        width: parent.width*0.8
+        width: parent.width-100
         height: parent.height/2
         anchors.top: parent.top
         url: "qrc:/h1.html"
@@ -31,7 +31,7 @@ ApplicationWindow {
 
     WebEngineView {
         id: webview2
-        width: parent.width*0.8
+        width: parent.width-100
         height: parent.height/2
         anchors.top: webview1.bottom
         url: "qrc:/heatmap.html"
@@ -40,16 +40,16 @@ ApplicationWindow {
 
     Button {
         text: "generateH1"
+        anchors.left: webview1.right
         anchors.right: parent.right
         anchors.top: parent.top
-        anchors.margins: 30
         onClicked: datasource.generateRandomDataH1()
     }
     Button {
         text: "generateH2"
+        anchors.left: webview2.right
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        anchors.margins: 30
         onClicked: datasource.generateRandomDataH2()
     }
 }
