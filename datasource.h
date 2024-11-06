@@ -23,19 +23,35 @@
  * SUCH DAMAGE.
  */
 
-#include "datasource.h"
-#include <QGuiApplication>
-#include <QQmlApplicationEngine>
-#include <QtWebEngineQuick>
+#pragma once
 
-int main(int argc, char *argv[])
-{
-    QtWebEngineQuick::initialize();
-    QGuiApplication app(argc, argv);
-    qmlRegisterType<DataSource>("jianwei.com", 1, 0, "DataSource");
+#include <QObject>
+#include <QVariantList>
 
-    QQmlApplicationEngine engine;
-    engine.load(QUrl(QStringLiteral("qrc:/qml/main.qml")));
+class DataSource : public QObject {
+    Q_OBJECT
 
-    return app.exec();
-}
+    Q_PROPERTY(QVariantList dataH1 READ dataH1 NOTIFY dataH1Changed)
+    Q_PROPERTY(QVariantList dataH2X READ dataH2X NOTIFY dataH2XChanged)
+    Q_PROPERTY(QVariantList dataH2Y READ dataH2Y NOTIFY dataH2YChanged)
+
+  public:
+    DataSource(QObject *parent = nullptr);
+
+    QVariantList dataH1() const;
+    QVariantList dataH2X() const;
+    QVariantList dataH2Y() const;
+
+    Q_INVOKABLE void generateRandomDataH1();
+    Q_INVOKABLE void generateRandomDataH2();
+
+signals:
+  void dataH1Changed(const QVariantList &data);
+  void dataH2XChanged(const QVariantList &dataX, const QVariantList &dataY);
+  void dataH2YChanged(const QVariantList &data);
+
+private:
+  QVariantList valueListH1;
+  QVariantList valueListH2X;
+  QVariantList valueListH2Y;
+};

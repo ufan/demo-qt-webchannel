@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript" src="qrc:///js/webchannel/qwebchannel.js"></script>
+        <script type="importmap" >
+         { "imports": {"jsroot": "qrc:///js/jsroot/modules/main.mjs"} }
+        </script>
+    </head>
+    <body>
+        <div id="canvas" style="margin:auto; width: 600px; height: 600px;"> </div>
+
+        <script type="module">
+          import {draw, redraw, createHistogram} from 'jsroot';
+
+         var updateH2 = function(dataX, dataY) {
+             let h2 = createHistogram('TH2I', 100, 100);
+             h2.fXaxis.fXmin = -5;
+             h2.fXaxis.fXmax = 5;
+             h2.fYaxis.fXmin = -5;
+             h2.fYaxis.fXmax = 5;
+             for (let i = 0; i < dataX.length; i++) {
+                 h2.Fill(dataX[i], dataY[i]);
+             }
+             h2.fName = 'h2generated';
+             h2.fTitle = 'Heatmap';
+             redraw('canvas', h2, 'colz');
+         }
+
+         window.onload = function(){
+             new QWebChannel(qt.webChannelTransport,
+                             function(channel) {
+                                 var dataSource = channel.objects.dataSource;
+                                 dataSource.dataH2XChanged.connect(updateH2);
+                             }
+             );
+         }
+        </script>
+    </body>
+</html>
