@@ -2,19 +2,16 @@
 <html>
     <head>
         <title>Create and draw ROOT histograms</title>
-        <script type="text/javascript" src="qrc:///js/webchannel/qwebchannel.js"></script>
-        <script type="importmap" >
-         { "imports": {"jsroot": "qrc:///js/jsroot/modules/main.mjs"} }
-        </script>
+        <script type="text/javascript" src="qrc:/js/webchannel/qwebchannel.js"></script>
+        <!-- <script type="text/javascript" src="https://root.cern/js/latest/build/jsroot.js"></script> -->
+        <script type="text/javascript" src="qrc:/js/jsroot/build/jsroot.js"></script>
     </head>
     <body>
         <div id="canvas" style="margin:auto; width: 600px; height: 600px;"> </div>
 
-        <script type="module">
-          import {draw, redraw, createHistogram} from 'jsroot';
-
+        <script>
          var updateH1 = function(data) {
-             let h1 = createHistogram('TH1I', 100);
+             let h1 = JSROOT.createHistogram('TH1I', 100);
              h1.fXaxis.fXmin = -5;
              h1.fXaxis.fXmax = 5;
              for (let i = 0; i < data.length; i++) {
@@ -22,7 +19,7 @@
              }
              h1.fName = 'h1generated';
              h1.fTitle = 'Gaussion';
-             redraw('canvas', h1);
+             JSROOT.redraw('canvas', h1);
          }
 
          window.onload = function(){

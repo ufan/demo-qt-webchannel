@@ -38,10 +38,8 @@ const clTStreamerElement = 'TStreamerElement', clTStreamerObject = 'TStreamerObj
       // kSTLforwardlist = 9, kSTLunorderedset = 10, kSTLunorderedmultiset = 11, kSTLunorderedmap = 12,
       // kSTLunorderedmultimap = 13, kSTLend = 14
 
-      kBaseClass = 'BASE',
-
       // name of base IO types
-      BasicTypeNames = [kBaseClass, 'char', 'short', 'int', 'long', 'float', 'int', 'const char*', 'double', 'Double32_t',
+      BasicTypeNames = ['BASE', 'char', 'short', 'int', 'long', 'float', 'int', 'const char*', 'double', 'Double32_t',
                         'char', 'unsigned  char', 'unsigned short', 'unsigned', 'unsigned long', 'unsigned', 'Long64_t', 'ULong64_t', 'bool', 'Float16_t'],
 
       // names of STL containers
@@ -488,6 +486,19 @@ function addUserStreamer(type, user_streamer) {
    CustomStreamers[type] = user_streamer;
 }
 
+function getTDatimeDate() {
+   const res = new Date();
+   res.setFullYear((this.fDatime >>> 26) + 1995);
+   res.setMonth(((this.fDatime << 6) >>> 28) - 1);
+   res.setDate((this.fDatime << 10) >>> 27);
+   res.setHours((this.fDatime << 15) >>> 27);
+   res.setMinutes((this.fDatime << 20) >>> 26);
+   res.setSeconds((this.fDatime << 26) >>> 26);
+   res.setMilliseconds(0);
+   return res;
+}
+
+
 /** @summary these are streamers which do not handle version regularly
   * @desc used for special classes like TRef or TBasket
   * @private */
@@ -500,6 +511,7 @@ const DirectStreamers = {
 
    TDatime(buf, obj) {
       obj.fDatime = buf.ntou4();
+      obj.getDate = getTDatimeDate;
    },
 
    TKey(buf, key) {
@@ -774,7 +786,7 @@ function createMemberStreamer(element, file) {
       fMaxIndex: element.fMaxIndex
    };
 
-   if (element.fTypeName === kBaseClass) {
+   if (element.fTypeName === 'BASE') {
       if (getArrayKind(member.name) > 0) {
          // this is workaround for arrays as base class
          // we create 'fArray' member, which read as any other data member
@@ -889,6 +901,7 @@ function createMemberStreamer(element, file) {
       case kOffsetL + kDouble32:
       case kOffsetP + kDouble32:
          member.double32 = true;
+      // eslint-disable-next-line no-fallthrough
       case kFloat16:
       case kOffsetL + kFloat16:
       case kOffsetP + kFloat16:
@@ -948,7 +961,7 @@ function createMemberStreamer(element, file) {
       case kAnyp:
       case kObjectp:
       case kObject: {
-         let classname = (element.fTypeName === kBaseClass) ? element.fName : element.fTypeName;
+         let classname = (element.fTypeName === 'BASE') ? element.fName : element.fTypeName;
          if (classname[classname.length - 1] === '*')
             classname = classname.slice(0, classname.length - 1);
 
@@ -1498,7 +1511,7 @@ function ZIP_inflate(arr, tgt) {
                for (o = 0; o < z; ++o)
                   q[o] = { e: 0, b: 0, n: 0, t: null }; // new zip_HuftNode
 
-               if (tail === null)
+               if (tail == null)
                   tail = res.root = { next: null, list: null }; // new zip_HuftList();
                else
                   tail = tail.next = { next: null, list: null }; // new zip_HuftList();
@@ -1680,11 +1693,11 @@ function ZIP_inflate(arr, tgt) {
 
    function zip_inflate_fixed(buff, off, size) {
       /* decompress an inflated type 1 (fixed Huffman codes) block.  We should
-         either replace this with a custom decoder, or at least pre-compute the
+         either replace this with a custom decoder, or at least precompute the
          Huffman tables. */
 
       // if first time, set up tables for fixed blocks
-      if (zip_fixed_tl === null) {
+      if (zip_fixed_tl == null) {
          // literal table
          const l = Array(288).fill(8, 0, 144).fill(9, 144, 256).fill(7, 256, 280).fill(8, 280, 288);
          // make a complete, but wrong code set
@@ -1877,14 +1890,14 @@ function ZIP_inflate(arr, tgt) {
                break;
 
             case 1: // zip_STATIC_TREES
-               if (zip_tl !== null)
+               if (zip_tl != null)
                   i = zip_inflate_codes(buff, off + n, size - n);
                else
                   i = zip_inflate_fixed(buff, off + n, size - n);
                break;
 
             case 2: // zip_DYN_TREES
-               if (zip_tl !== null)
+               if (zip_tl != null)
                   i = zip_inflate_codes(buff, off + n, size - n);
                else
                   i = zip_inflate_dynamic(buff, off + n, size - n);
@@ -1921,7 +1934,7 @@ function ZIP_inflate(arr, tgt) {
  * Decode a block. Assumptions: input contains all sequences of a
  * chunk, output is large enough to receive the decoded data.
  * If the output buffer is too small, an error will be thrown.
- * If the returned value is negative, an error occurred at the returned offset.
+ * If the returned value is negative, an error occured at the returned offset.
  *
  * @param input {Buffer} input data
  * @param output {Buffer} output data
@@ -2175,6 +2188,7 @@ class TBuffer {
       * @desc string either contains all symbols or until 0 symbol */
    readFastString(n) {
       let res = '', code, closed = false;
+      // eslint-disable-next-line no-unmodified-loop-condition
       for (let i = 0; (n < 0) || (i < n); ++i) {
          code = this.ntou1();
          if (code === 0) { closed = true; if (n < 0) break; }
@@ -3076,7 +3090,7 @@ class TFile {
 
       // one uses Promises while in some cases we need to
       // read sub-directory to get list of keys
-      // in such situation calls are asynchronous
+      // in such situation calls are asynchrone
       return this.getKey(obj_name, cycle).then(key => {
          if ((obj_name === nameStreamerInfo) && (key.fClassName === clTList))
             return this.fStreamerInfos;
@@ -3313,7 +3327,7 @@ class TFile {
                return si;
             }
          }
-         cache[checksum] = null; // checksum did not found, do not try again
+         cache[checksum] = null; // checksum didnot found, do not try again
       } else {
          for (let i = 0; i < len; ++i) {
             const si = arr[i];
@@ -3427,7 +3441,7 @@ class TFile {
       return tgt;
    }
 
-   /** @summary Fully cleanup TFile data
+   /** @summary Fully clenaup TFile data
      * @private */
    delete() {
       this.fDirectories = null;
@@ -3631,7 +3645,7 @@ class TLocalFile extends TFile {
 
    /** @summary read buffer from local file
      * @return {Promise} with read data */
-   async readBuffer(place, filename /* , progress_callback */) {
+   async readBuffer(place, filename /*, progress_callback */) {
       const file = this.fLocalFile;
 
       return new Promise((resolve, reject) => {
@@ -3700,7 +3714,7 @@ class TNodejsFile extends TFile {
 
    /** @summary Read buffer from node.js file
      * @return {Promise} with requested blocks */
-   async readBuffer(place, filename /* , progress_callback */) {
+   async readBuffer(place, filename /*, progress_callback */) {
       return new Promise((resolve, reject) => {
          if (filename)
             return reject(Error(`Cannot access other local file ${filename}`));
@@ -3711,6 +3725,7 @@ class TNodejsFile extends TFile {
          const blobs = [];
          let cnt = 0;
 
+         // eslint-disable-next-line n/handle-callback-err
          const readfunc = (_err, _bytesRead, buf) => {
             const res = new DataView(buf.buffer, buf.byteOffset, place[cnt + 1]);
             if (place.length === 2) return resolve(res);
@@ -3727,7 +3742,7 @@ class TNodejsFile extends TFile {
 } // class TNodejsFile
 
 /**
-  * @summary Proxy to read file content
+  * @summary Proxy to read file contenxt
   *
   * @desc Should implement following methods:
   *
@@ -3782,7 +3797,7 @@ class TProxyFile extends TFile {
 
    /** @summary Read buffer from FileProxy
      * @return {Promise} with requested blocks */
-   async readBuffer(place, filename /* , progress_callback */) {
+   async readBuffer(place, filename /*, progress_callback */) {
       if (filename)
          return Promise.reject(Error(`Cannot access other file ${filename}`));
 
@@ -3851,7 +3866,7 @@ export { kChar, kShort, kInt, kLong, kFloat, kCounter,
    kUChar, kUShort, kUInt, kULong, kBits,
    kLong64, kULong64, kBool, kFloat16,
    kBase, kOffsetL, kOffsetP, kObject, kAny, kObjectp, kObjectP, kTString,
-   kAnyP, kStreamer, kStreamLoop, kSTLp, kSTL, kBaseClass,
+   kAnyP, kStreamer, kStreamLoop, kSTLp, kSTL,
    clTStreamerInfoList, clTDirectory, clTDirectoryFile, nameStreamerInfo, clTBasket,
    R__unzip, addUserStreamer, createStreamerElement, createMemberStreamer,
-   openFile, reconstructObject, FileProxy, TBuffer };
+   openFile, reconstructObject, FileProxy, TBuffer }; /*, TDirectory, TFile, TLocalFile, TNodejsFile */

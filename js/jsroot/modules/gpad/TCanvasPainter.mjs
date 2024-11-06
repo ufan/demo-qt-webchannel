@@ -1,4 +1,4 @@
-import { BIT, settings, internals, browser, create, parse, toJSON, loadScript, isFunc, isStr, clTCanvas } from '../core.mjs';
+import { BIT, settings, browser, create, parse, toJSON, loadScript, isFunc, isStr, clTCanvas } from '../core.mjs';
 import { select as d3_select } from '../d3.mjs';
 import { closeCurrentWindow, showProgress, loadOpenui5, ToolbarIcons, getColorExec } from '../gui/utils.mjs';
 import { GridDisplay, getHPainter } from '../gui/display.mjs';
@@ -52,11 +52,6 @@ class TCanvasPainter extends TPadPainter {
          this.setLayoutKind('simple');
       delete this._changed_layout;
       super.cleanup();
-   }
-
-   /** @summary Returns canvas name */
-   getCanvasName() {
-      return this.getObjectName();
    }
 
    /** @summary Returns layout kind */
@@ -224,7 +219,9 @@ class TCanvasPainter extends TPadPainter {
      * @desc Function should be used only from the func which supposed to be replaced by ui5
      * @private */
    testUI5() {
-      return this.use_openui ?? false;
+      if (!this.use_openui) return false;
+      console.warn('full ui5 should be used - not loaded yet? Please check!!');
+      return true;
    }
 
    /** @summary Draw in side panel
@@ -327,13 +324,13 @@ class TCanvasPainter extends TPadPainter {
          this._websocket._tmouts[name] = setTimeout(() => { delete this._websocket._tmouts[name]; }, tm);
    }
 
-   /** @summary Handler for websocket open event
+   /** @summary Hanler for websocket open event
      * @private */
    onWebsocketOpened(/* handle */) {
-      // indicate that we are ready to receive any following commands
+      // indicate that we are ready to recieve any following commands
    }
 
-   /** @summary Handler for websocket close event
+   /** @summary Hanler for websocket close event
      * @private */
    onWebsocketClosed(/* handle */) {
       if (!this.embed_canvas)
@@ -364,15 +361,10 @@ class TCanvasPainter extends TPadPainter {
              .then(() => this.redrawPadSnap(snap))
              .then(() => {
                 this.completeCanvasSnapDrawing();
-                let ranges = this.getWebPadOptions(); // all data, including sub-pads
+                let ranges = this.getWebPadOptions(); // all data, including subpads
                 if (ranges) ranges = ':' + ranges;
                 handle.send(`READY6:${version}${ranges}`); // send ready message back when drawing completed
                 this.confirmDraw();
-             }).catch(err => {
-               if (isFunc(this.showConsoleError))
-                  this.showConsoleError(err);
-               else
-                  console.log(err);
              });
       } else if (msg.slice(0, 5) === 'MENU:') {
          // this is menu with exact identifier for object
@@ -387,7 +379,7 @@ class TCanvasPainter extends TPadPainter {
                cmdid = msg.slice(0, p1),
                cmd = msg.slice(p1+1),
                reply = `REPLY:${cmdid}:`;
-         if ((cmd === 'SVG') || (cmd === 'PNG') || (cmd === 'JPEG') || (cmd === 'WEBP') || (cmd === 'PDF')) {
+         if ((cmd === 'SVG') || (cmd === 'PNG') || (cmd === 'JPEG')) {
             this.createImage(cmd.toLowerCase())
                 .then(res => handle.send(reply + res));
          } else {
@@ -619,19 +611,6 @@ class TCanvasPainter extends TPadPainter {
       return true;
    }
 
-   /** @summary Send command to start fit panel code on the server
-     * @private */
-   startFitPanel(standalone) {
-      if (!this._websocket)
-         return false;
-
-      const new_conn = standalone ? null : this._websocket.createChannel();
-
-      this.sendWebsocket('FITPANEL:' + (standalone ? 'standalone' : new_conn.getChannelId()));
-
-      return new_conn;
-   }
-
    /** @summary Complete handling of online canvas drawing
      * @private */
    completeCanvasSnapDrawing() {
@@ -782,7 +761,7 @@ class TCanvasPainter extends TPadPainter {
    }
 
    /** @summary produce JSON for TCanvas, which can be used to display canvas once again */
-   produceJSON(spacing) {
+   produceJSON() {
       const canv = this.getObject(),
             fill0 = (canv.fFillStyle === 0),
             axes = [], hists = [];
@@ -835,7 +814,7 @@ class TCanvasPainter extends TPadPainter {
       // const fp = this.getFramePainter();
       // fp?.setRootPadRange(this.getRootPad());
 
-      const res = toJSON(canv, spacing);
+      const res = toJSON(canv);
 
       if (fill0) canv.fFillStyle = 0;
 
@@ -862,7 +841,7 @@ class TCanvasPainter extends TPadPainter {
          return;
 
       // workaround for qt5-based display where inner window size is used
-      if ((browser.qt5 || browser.qt6) && fullW > 100 && fullH > 60) {
+      if (browser.qt5 && fullW > 100 && fullH > 60) {
          fullW -= 3;
          fullH -= 30;
       }
@@ -876,21 +855,12 @@ class TCanvasPainter extends TPadPainter {
       if (nocanvas) can = create(clTCanvas);
 
       const painter = new TCanvasPainter(dom, can);
-      painter.checkSpecialsInPrimitives(can, true);
+      painter.checkSpecialsInPrimitives(can);
 
-      if (!nocanvas && can.fCw && can.fCh) {
-         const d = painter.selectDom();
-         let apply_size = false;
-         if (!painter.isBatchMode()) {
-            const rect0 = d.node().getBoundingClientRect();
-            apply_size = !rect0.height && (rect0.width > 0.1*can.fCw);
-         } else {
-            const arg = d.property('_batch_use_canvsize');
-            apply_size = arg || (arg === undefined);
-         }
-         if (apply_size) {
-            d.style('width', can.fCw + 'px').style('height', can.fCh + 'px')
-              .attr('width', can.fCw).attr('height', can.fCh);
+      if (!nocanvas && can.fCw && can.fCh && !painter.isBatchMode()) {
+         const rect0 = painter.selectDom().node().getBoundingClientRect();
+         if (!rect0.height && (rect0.width > 0.1*can.fCw)) {
+            painter.selectDom().style('width', can.fCw+'px').style('height', can.fCh+'px');
             painter._fixed_size = true;
          }
       }
@@ -902,7 +872,7 @@ class TCanvasPainter extends TPadPainter {
       painter.addPadButtons();
 
       if (nocanvas && opt.indexOf('noframe') < 0)
-         directDrawTFrame(painter, null);
+         directDrawTFrame(dom, null);
 
       // select global reference - required for keys handling
       selectActivePad({ pp: painter, active: true });
@@ -927,28 +897,13 @@ async function ensureTCanvas(painter, frame_kind) {
 
    // simple check - if canvas there, can use painter
    const noframe = (frame_kind === false) || (frame_kind === '3d') ? 'noframe' : '',
-         createCanv = () => {
-            if ((noframe !== 'noframe') || !isFunc(painter.getUserRanges))
-               return null;
-            const ranges = painter.getUserRanges();
-            if (!ranges)
-               return null;
-            const canv = create(clTCanvas),
-                  dx = (ranges.maxx - ranges.minx) || 1,
-                  dy = (ranges.maxy - ranges.miny) || 1;
-            canv.fX1 = ranges.minx - dx * 0.1;
-            canv.fX2 = ranges.maxx + dx * 0.1;
-            canv.fY1 = ranges.miny - dy * 0.1;
-            canv.fY2 = ranges.maxy + dy * 0.1;
-            return canv;
-         },
          promise = painter.getCanvSvg().empty()
-                   ? TCanvasPainter.draw(painter.getDom(), createCanv(), noframe)
+                   ? TCanvasPainter.draw(painter.getDom(), null, noframe)
                    : Promise.resolve(true);
 
    return promise.then(() => {
       if ((frame_kind !== false) && painter.getFrameSvg().selectChild('.main_layer').empty() && !painter.getFramePainter())
-         directDrawTFrame(painter.getPadPainter(), null, frame_kind);
+         directDrawTFrame(painter.getDom(), null, frame_kind);
 
       painter.addToPadPrimitives();
       return painter;
@@ -957,7 +912,7 @@ async function ensureTCanvas(painter, frame_kind) {
 
 /** @summary draw TPad snapshot from TWebCanvas
   * @private */
-async function drawTPadSnapshot(dom, snap /* , opt */) {
+async function drawTPadSnapshot(dom, snap /*, opt */) {
    const can = create(clTCanvas),
          painter = new TCanvasPainter(dom, can);
    painter.normal_canvas = false;
@@ -977,7 +932,5 @@ async function drawTFrame(dom, obj, opt) {
    fp.mode3d = opt === '3d';
    return ensureTCanvas(fp, false).then(() => fp.redraw());
 }
-
-Object.assign(internals.jsroot, { ensureTCanvas, TPadPainter, TCanvasPainter });
 
 export { ensureTCanvas, drawTPadSnapshot, drawTFrame, TPadPainter, TCanvasPainter };

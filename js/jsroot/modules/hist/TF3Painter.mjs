@@ -2,8 +2,8 @@ import { createHistogram, setHistogramTitle, kNoStats, settings, clTF3, clTH2F }
 import { TH2Painter } from '../hist/TH2Painter.mjs';
 import { proivdeEvalPar } from '../base/func.mjs';
 import { produceTAxisLogScale, scanTF1Options } from '../hist/TF1Painter.mjs';
-import { DrawOptions } from '../base/BasePainter.mjs';
 import { ObjectPainter, getElementMainPainter } from '../base/ObjectPainter.mjs';
+import { DrawOptions } from '../base/BasePainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
 
 
@@ -42,7 +42,7 @@ class TF3Painter extends TH2Painter {
    getPrimaryObject() { return this.$func; }
 
    /** @summary Update histogram */
-   updateObject(obj /* , opt */) {
+   updateObject(obj /*, opt */) {
       if (!obj || (this.getClassName() !== obj._typename)) return false;
       delete obj.evalPar;
       const histo = this.getHisto();
@@ -182,7 +182,8 @@ class TF3Painter extends TH2Painter {
          npx = Math.round(func.fSave[nsave+6]);
          npy = Math.round(func.fSave[nsave+7]);
          npz = Math.round(func.fSave[nsave+8]);
-
+         // dx = (xmax - xmin) / npx,
+         // dy = (ymax - ymin) / npy,
          const dz = (zmax - zmin) / npz;
 
          ensureBins(npx + 1, npy + 1);
@@ -246,7 +247,7 @@ class TF3Painter extends TH2Painter {
    }
 
    /** @summary fill information for TWebCanvas
-     * @desc Used to inform web canvas when evaluation failed
+    * @desc Used to inform webcanvas when evaluation failed
      * @private */
    fillWebObjectOptions(opt) {
       opt.fcust = this._fail_eval && !this.use_saved ? 'func_fail' : '';

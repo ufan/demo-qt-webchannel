@@ -1,4 +1,4 @@
-import { gStyle, settings, clTF1, clTProfile, kNoZoom, kInspect, isFunc } from '../core.mjs';
+import { gStyle, settings, clTF1, kNoZoom, kInspect, isFunc } from '../core.mjs';
 import { rgb as d3_rgb } from '../d3.mjs';
 import { floatToString, buildSvgCurve, addHighlightStyle } from '../base/BasePainter.mjs';
 import { THistPainter } from './THistPainter.mjs';
@@ -14,23 +14,6 @@ const PadDrawOptions = ['LOGXY', 'LOGX', 'LOGY', 'LOGZ', 'LOGV', 'LOG', 'LOG2X',
  */
 
 class TH1Painter extends THistPainter {
-
-   /** @summary Returns histogram
-     * @desc Also assigns custom getBinContent method for TProfile if PROJX options specified */
-   getHisto() {
-      const histo = super.getHisto();
-      if (histo?._typename === clTProfile) {
-         if (!histo.$getBinContent)
-            histo.$getBinContent = histo.getBinContent;
-         switch (this.options?.ProfileProj) {
-            case 'B': histo.getBinContent = histo.getBinEntries; break;
-            case 'C=E': histo.getBinContent = histo.getBinError; break;
-            case 'W': histo.getBinContent = function(i) { return this.$getBinContent(i) * this.getBinEntries(i); }; break;
-            default: histo.getBinContent = histo.$getBinContent; break;
-         }
-      }
-      return histo;
-   }
 
    /** @summary Convert TH1K into normal binned histogram */
    convertTH1K() {
@@ -63,7 +46,7 @@ class TH1Painter extends THistPainter {
 
       const left = this.getSelectIndex('x', 'left'),
             right = this.getSelectIndex('x', 'right'),
-            pad_logy = this.getPadPainter()?.getPadLog(this.options.swap_xy() ? 'x' : 'y'),
+            pad_logy = this.getPadPainter()?.getPadLog(this.options.BarStyle >= 20 ? 'x' : 'y'),
             f1 = this.options.Func ? this.findFunction(clTF1) : null;
 
       if (when_axis_changed && (left === this.scan_xleft) && (right === this.scan_xright))
@@ -148,8 +131,25 @@ class TH1Painter extends THistPainter {
          }
       }
 
-      hmin = this.options.minimum;
-      hmax = this.options.maximum;
+      // final adjustment like in THistPainter.cxx line 7309
+      if (!this._exact_y_range && !this._set_y_range && !pad_logy) {
+         if ((this.options.BaseLine !== false) && (this.ymin >= 0))
+            this.ymin = 0;
+         else {
+            const positive = (this.ymin >= 0);
+            this.ymin -= gStyle.fHistTopMargin*(this.ymax - this.ymin);
+            if (positive && (this.ymin < 0))
+               this.ymin = 0;
+         }
+         this.ymax += gStyle.fHistTopMargin*(this.ymax - this.ymin);
+      }
+
+      if (this.options.ignore_min_max)
+         hmin = hmax = kNoZoom;
+      else {
+         hmin = this.options.minimum;
+         hmax = this.options.maximum;
+      }
 
       if ((hmin === hmax) && (hmin !== kNoZoom)) {
          if (hmin < 0) {
@@ -160,61 +160,36 @@ class TH1Painter extends THistPainter {
          }
       }
 
-      let fix_min = false, fix_max = false;
+      this._set_y_range = false;
 
       if (this.options.ohmin && this.options.ohmax && !this.draw_content) {
-         // case of hstack drawing, zooming allowed only when flag is provided
-
-         if (this.options.zoom_min_max) {
-            if ((hmin !== kNoZoom) && (hmin <= this.ymin))
-               hmin = kNoZoom;
-            if ((hmax !== kNoZoom) && (hmax >= this.ymax))
-               hmax = kNoZoom;
-            set_zoom = true;
-         } else
-            hmin = hmax = kNoZoom;
+         // case of hstack drawing - histogram range used for zooming, but only for stack
+         set_zoom = !this.options.ignore_min_max;
       } else if ((hmin !== kNoZoom) && (hmax !== kNoZoom) && !this.draw_content &&
           ((this.ymin === this.ymax) || (this.ymin > hmin) || (this.ymax < hmax))) {
-         // often appears with TF1 painter where Y range is not set properly
          this.ymin = hmin;
          this.ymax = hmax;
-         fix_min = fix_max = true;
+         this._set_y_range = true;
       } else {
          if (hmin !== kNoZoom) {
-            fix_min = true;
+            this._set_y_range = true;
             if (hmin < this.ymin)
                this.ymin = hmin;
              set_zoom = true;
          }
          if (hmax !== kNoZoom) {
-            fix_max = true;
+            this._set_y_range = true;
             if (hmax > this.ymax)
                this.ymax = hmax;
             set_zoom = true;
          }
       }
 
-      // final adjustment like in THistPainter.cxx line 7309
-      if (!this._exact_y_range && !pad_logy) {
-         if (!fix_min) {
-            if ((this.options.BaseLine !== false) && (this.ymin >= 0))
-               this.ymin = 0;
-            else {
-               const positive = (this.ymin >= 0);
-               this.ymin -= gStyle.fHistTopMargin*(this.ymax - this.ymin);
-               if (positive && (this.ymin < 0))
-                  this.ymin = 0;
-            }
-         }
-         if (!fix_max)
-            this.ymax += gStyle.fHistTopMargin*(this.ymax - this.ymin);
-      }
-
       // always set zoom when hmin/hmax is configured
       // fMinimum/fMaximum values is a way how ROOT handles Y scale zooming for TH1
 
       if (!when_axis_changed) {
-         if (set_zoom && ((hmin !== kNoZoom) || (hmax !== kNoZoom))) {
+         if (set_zoom) {
             this.zoom_ymin = (hmin === kNoZoom) ? this.ymin : hmin;
             this.zoom_ymax = (hmax === kNoZoom) ? this.ymax : hmax;
          } else {
@@ -254,6 +229,7 @@ class TH1Painter extends THistPainter {
             stat_sumwy2 += histo.fSumw2[i + 1];
          } else
             w = histo.getBinContent(i + 1);
+
 
          if ((xmax === null) || (w > wmax)) {
             xmax = xx;
@@ -390,26 +366,23 @@ class TH1Painter extends THistPainter {
       return true;
    }
 
-   /** @summary Get baseline for bar drawings */
-   getBarBaseline(funcs, height) {
-      let gry = funcs.swap_xy ? 0 : height;
-      if (Number.isFinite(this.options.BaseLine) && (this.options.BaseLine >= funcs.scale_ymin))
-         gry = Math.round(funcs.gry(this.options.BaseLine));
-      return gry;
-   }
-
    /** @summary Draw histogram as bars */
    async drawBars(funcs, height) {
       const left = this.getSelectIndex('x', 'left', -1),
             right = this.getSelectIndex('x', 'right', 1),
-            histo = this.getHisto(),
-            xaxis = histo.fXaxis,
+            histo = this.getHisto(), xaxis = histo.fXaxis,
             show_text = this.options.Text;
       let text_col, text_angle, text_size,
-          side = (this.options.BarStyle > 10) ? this.options.BarStyle % 10 : 0, pr = Promise.resolve();
+          i, x1, x2, grx1, grx2, y, gry1, gry2, w,
+          bars = '', barsl = '', barsr = '',
+          side = (this.options.BarStyle > 10) ? this.options.BarStyle % 10 : 0;
 
       if (side > 4) side = 4;
-      const gry2 = this.getBarBaseline(funcs, height);
+      gry2 = funcs.swap_xy ? 0 : height;
+      if (Number.isFinite(this.options.BaseLine)) {
+         if (this.options.BaseLine >= funcs.scale_ymin)
+            gry2 = Math.round(funcs.gry(this.options.BaseLine));
+       }
 
       if (show_text) {
          text_col = this.getColor(histo.fMarkerColor);
@@ -419,81 +392,77 @@ class TH1Painter extends THistPainter {
          if ((histo.fMarkerSize !== 1) && text_angle)
             text_size = 0.02*height*histo.fMarkerSize;
 
-         pr = this.startTextDrawingAsync(42, text_size, this.draw_g, text_size);
+         this.startTextDrawing(42, text_size, this.draw_g, text_size);
       }
 
-      return pr.then(() => {
-         let bars = '', barsl = '', barsr = '';
+      for (i = left; i < right; ++i) {
+         x1 = xaxis.GetBinLowEdge(i+1);
+         x2 = xaxis.GetBinLowEdge(i+2);
 
-         for (let i = left; i < right; ++i) {
-            const x1 = xaxis.GetBinLowEdge(i + 1),
-                  x2 = xaxis.GetBinLowEdge(i + 2);
+         if (funcs.logx && (x2 <= 0)) continue;
 
-            if (funcs.logx && (x2 <= 0)) continue;
+         grx1 = Math.round(funcs.grx(x1));
+         grx2 = Math.round(funcs.grx(x2));
 
-            let grx1 = Math.round(funcs.grx(x1)),
-                grx2 = Math.round(funcs.grx(x2)),
-                w = grx2 - grx1;
-            const y = histo.getBinContent(i+1);
+         y = histo.getBinContent(i+1);
+         if (funcs.logy && (y < funcs.scale_ymin)) continue;
+         gry1 = Math.round(funcs.gry(y));
 
-            if (funcs.logy && (y < funcs.scale_ymin)) continue;
-            const gry1 = Math.round(funcs.gry(y));
+         w = grx2 - grx1;
+         grx1 += Math.round(histo.fBarOffset/1000*w);
+         w = Math.round(histo.fBarWidth/1000*w);
 
-            grx1 += Math.round(histo.fBarOffset/1000*w);
-            w = Math.round(histo.fBarWidth/1000*w);
+         if (funcs.swap_xy)
+            bars += `M${gry2},${grx1}h${gry1-gry2}v${w}h${gry2-gry1}z`;
+         else
+            bars += `M${grx1},${gry1}h${w}v${gry2-gry1}h${-w}z`;
+
+         if (side > 0) {
+            grx2 = grx1 + w;
+            w = Math.round(w * side / 10);
+            if (funcs.swap_xy) {
+               barsl += `M${gry2},${grx1}h${gry1-gry2}v${w}h${gry2-gry1}z`;
+               barsr += `M${gry2},${grx2}h${gry1-gry2}v${-w}h${gry2-gry1}z`;
+            } else {
+               barsl += `M${grx1},${gry1}h${w}v${gry2-gry1}h${-w}z`;
+               barsr += `M${grx2},${gry1}h${-w}v${gry2-gry1}h${w}z`;
+            }
+         }
+
+         if (show_text && y) {
+            const text = (y === Math.round(y)) ? y.toString() : floatToString(y, gStyle.fPaintTextFormat);
 
             if (funcs.swap_xy)
-               bars += `M${gry2},${grx1}h${gry1-gry2}v${w}h${gry2-gry1}z`;
+               this.drawText({ align: 12, x: Math.round(gry1 + text_size/2), y: Math.round(grx1+0.1), height: Math.round(w*0.8), text, color: text_col, latex: 0 });
+            else if (text_angle)
+               this.drawText({ align: 12, x: grx1+w/2, y: Math.round(gry1 - 2 - text_size/5), width: 0, height: 0, rotate: text_angle, text, color: text_col, latex: 0 });
             else
-               bars += `M${grx1},${gry1}h${w}v${gry2-gry1}h${-w}z`;
-
-            if (side > 0) {
-               grx2 = grx1 + w;
-               w = Math.round(w * side / 10);
-               if (funcs.swap_xy) {
-                  barsl += `M${gry2},${grx1}h${gry1-gry2}v${w}h${gry2-gry1}z`;
-                  barsr += `M${gry2},${grx2}h${gry1-gry2}v${-w}h${gry2-gry1}z`;
-               } else {
-                  barsl += `M${grx1},${gry1}h${w}v${gry2-gry1}h${-w}z`;
-                  barsr += `M${grx2},${gry1}h${-w}v${gry2-gry1}h${w}z`;
-               }
-            }
-
-            if (show_text && y) {
-               const text = (y === Math.round(y)) ? y.toString() : floatToString(y, gStyle.fPaintTextFormat);
-
-               if (funcs.swap_xy)
-                  this.drawText({ align: 12, x: Math.round(gry1 + text_size/2), y: Math.round(grx1+0.1), height: Math.round(w*0.8), text, color: text_col, latex: 0 });
-               else if (text_angle)
-                  this.drawText({ align: 12, x: grx1+w/2, y: Math.round(gry1 - 2 - text_size/5), width: 0, height: 0, rotate: text_angle, text, color: text_col, latex: 0 });
-               else
-                  this.drawText({ align: 22, x: Math.round(grx1 + w*0.1), y: Math.round(gry1 - 2 - text_size), width: Math.round(w*0.8), height: text_size, text, color: text_col, latex: 0 });
-            }
+               this.drawText({ align: 22, x: Math.round(grx1 + w*0.1), y: Math.round(gry1 - 2 - text_size), width: Math.round(w*0.8), height: text_size, text, color: text_col, latex: 0 });
          }
+      }
 
-         if (bars) {
-            this.draw_g.append('svg:path')
-                     .attr('d', bars)
-                     .call(this.fillatt.func);
-         }
+      if (bars) {
+         this.draw_g.append('svg:path')
+                    .attr('d', bars)
+                    .call(this.fillatt.func);
+      }
 
-         if (barsl) {
-            this.draw_g.append('svg:path')
-               .attr('d', barsl)
+      if (barsl) {
+         this.draw_g.append('svg:path')
+             .attr('d', barsl)
+             .call(this.fillatt.func)
+             .style('fill', d3_rgb(this.fillatt.color).brighter(0.5).formatHex());
+      }
+
+      if (barsr) {
+         this.draw_g.append('svg:path')
+               .attr('d', barsr)
                .call(this.fillatt.func)
-               .style('fill', d3_rgb(this.fillatt.color).brighter(0.5).formatRgb());
-         }
+               .style('fill', d3_rgb(this.fillatt.color).darker(0.5).formatHex());
+      }
 
-         if (barsr) {
-            this.draw_g.append('svg:path')
-                  .attr('d', barsr)
-                  .call(this.fillatt.func)
-                  .style('fill', d3_rgb(this.fillatt.color).darker(0.5).formatRgb());
-         }
-
-         if (show_text)
-            return this.finishTextDrawing();
-      });
+      if (show_text)
+         return this.finishTextDrawing();
    }
 
    /** @summary Draw histogram as filled errors */
@@ -525,7 +494,7 @@ class TH1Painter extends THistPainter {
 
    /** @summary Draw TH1 as hist/line/curve
      * @return Promise or scalar value */
-   async drawNormal(funcs, width, height) {
+   drawNormal(funcs, width, height) {
       const left = this.getSelectIndex('x', 'left', -1),
             right = this.getSelectIndex('x', 'right', 2),
             histo = this.getHisto(),
@@ -545,8 +514,7 @@ class TH1Painter extends THistPainter {
           hints_err = null, hints_marker = null, hsz = 5,
           do_marker = false, do_err = false,
           dend = 0, dlw = 0, my, yerr1, yerr2, bincont, binerr, mx1, mx2, midx, lx, ly, mmx1, mmx2,
-          text_col, text_angle, text_size,
-          pr = Promise.resolve();
+          text_col, text_angle, text_size;
 
       if (show_errors && !show_markers && (histo.fMarkerStyle > 1))
          show_markers = true;
@@ -583,11 +551,7 @@ class TH1Painter extends THistPainter {
 
       const draw_markers = show_errors || show_markers,
             draw_any_but_hist = draw_markers || show_text || show_line || show_curve,
-            draw_hist = this.options.Hist && (!this.lineatt.empty() || !this.fillatt.empty()),
-            check_sumw2 = show_errors && histo.fSumw2?.length,
-            // if there are too many points, exclude many vertical drawings at the same X position
-            // instead define min and max value and made min-max drawing
-            use_minmax = draw_any_but_hist || ((right - left) > 3*width);
+            draw_hist = this.options.Hist && (!this.lineatt.empty() || !this.fillatt.empty());
 
       if (!draw_hist && !draw_any_but_hist)
          return this.removeG();
@@ -608,281 +572,269 @@ class TH1Painter extends THistPainter {
              }
          }
 
-         pr = this.startTextDrawingAsync(42, text_size, this.draw_g, text_size);
+         this.startTextDrawing(42, text_size, this.draw_g, text_size);
       }
 
-      return pr.then(() => {
-         // just to get correct values for the specified bin
-         const extract_bin = bin => {
-            bincont = histo.getBinContent(bin+1);
-            if (exclude_zero && (bincont === 0) && (!check_sumw2 || !histo.fSumw2[bin+1]))
-               return false;
-            mx1 = Math.round(funcs.grx(xaxis.GetBinLowEdge(bin+1)));
-            mx2 = Math.round(funcs.grx(xaxis.GetBinLowEdge(bin+2)));
-            midx = Math.round((mx1 + mx2) / 2);
-            if (startmidx === undefined) startmidx = midx;
-            my = Math.round(funcs.gry(bincont));
-            if (show_errors) {
-               binerr = histo.getBinError(bin+1);
-               yerr1 = Math.round(my - funcs.gry(bincont + binerr)); // up
-               yerr2 = Math.round(funcs.gry(bincont - binerr) - my); // down
-            } else
-               yerr1 = yerr2 = 20;
+      // if there are too many points, exclude many vertical drawings at the same X position
+      // instead define min and max value and made min-max drawing
+      const use_minmax = draw_any_but_hist || ((right - left) > 3*width),
 
-            return true;
-         }, draw_errbin = () => {
-            let edx = 5;
-            if (this.options.errorX > 0) {
-               edx = Math.round((mx2 - mx1) * this.options.errorX);
-               mmx1 = midx - edx;
-               mmx2 = midx + edx;
-               if (this.options.ErrorKind === 1)
-                  path_err += `M${mmx1+dend},${my-dlw}v${2*dlw}m0,-${dlw}h${mmx2-mmx1-2*dend}m0,-${dlw}v${2*dlw}`;
-               else
-                  path_err += `M${mmx1+dend},${my}h${mmx2-mmx1-2*dend}`;
-            }
+      // just to get correct values for the specified bin
+       extract_bin = bin => {
+         bincont = histo.getBinContent(bin+1);
+         if (exclude_zero && (bincont === 0)) return false;
+         mx1 = Math.round(funcs.grx(xaxis.GetBinLowEdge(bin+1)));
+         mx2 = Math.round(funcs.grx(xaxis.GetBinLowEdge(bin+2)));
+         midx = Math.round((mx1 + mx2) / 2);
+         if (startmidx === undefined) startmidx = midx;
+         my = Math.round(funcs.gry(bincont));
+         if (show_errors) {
+            binerr = histo.getBinError(bin+1);
+            yerr1 = Math.round(my - funcs.gry(bincont + binerr)); // up
+            yerr2 = Math.round(funcs.gry(bincont - binerr) - my); // down
+         } else
+            yerr1 = yerr2 = 20;
+
+         return true;
+      }, draw_errbin = () => {
+         let edx = 5;
+         if (this.options.errorX > 0) {
+            edx = Math.round((mx2 - mx1) * this.options.errorX);
+            mmx1 = midx - edx;
+            mmx2 = midx + edx;
             if (this.options.ErrorKind === 1)
-               path_err += `M${midx-dlw},${my-yerr1+dend}h${2*dlw}m${-dlw},0v${yerr1+yerr2-2*dend}m${-dlw},0h${2*dlw}`;
+               path_err += `M${mmx1+dend},${my-dlw}v${2*dlw}m0,-${dlw}h${mmx2-mmx1-2*dend}m0,-${dlw}v${2*dlw}`;
             else
-               path_err += `M${midx},${my-yerr1+dend}v${yerr1+yerr2-2*dend}`;
-            if (hints_err !== null) {
-               const he1 = Math.max(yerr1, 5), he2 = Math.max(yerr2, 5);
-               hints_err += `M${midx-edx},${my-he1}h${2*edx}v${he1+he2}h${-2*edx}z`;
-            }
-         }, draw_marker = () => {
-            if (funcs.swap_xy) {
-               path_marker += this.markeratt.create(my, midx);
-               if (hints_marker !== null)
-                  hints_marker += `M${my-hsz},${midx-hsz}v${2*hsz}h${2*hsz}v${-2*hsz}z`;
-            } else {
-               path_marker += this.markeratt.create(midx, my);
-               if (hints_marker !== null)
-                  hints_marker += `M${midx-hsz},${my-hsz}h${2*hsz}v${2*hsz}h${-2*hsz}z`;
-            }
-         }, draw_bin = bin => {
-            if (extract_bin(bin)) {
-               if (show_text) {
-                  const cont = text_profile ? histo.fBinEntries[bin+1] : bincont;
+               path_err += `M${mmx1+dend},${my}h${mmx2-mmx1-2*dend}`;
+         }
+         if (this.options.ErrorKind === 1)
+            path_err += `M${midx-dlw},${my-yerr1+dend}h${2*dlw}m${-dlw},0v${yerr1+yerr2-2*dend}m${-dlw},0h${2*dlw}`;
+         else
+            path_err += `M${midx},${my-yerr1+dend}v${yerr1+yerr2-2*dend}`;
+         if (hints_err !== null) {
+            const he1 = Math.max(yerr1, 5), he2 = Math.max(yerr2, 5);
+            hints_err += `M${midx-edx},${my-he1}h${2*edx}v${he1+he2}h${-2*edx}z`;
+         }
+      }, draw_bin = bin => {
+         if (extract_bin(bin)) {
+            if (show_text) {
+               const cont = text_profile ? histo.fBinEntries[bin+1] : bincont;
 
-                  if (cont !== 0) {
-                     const arg = text_angle
-                        ? { align: 12, x: midx, y: Math.round(my - 2 - text_size / 5), width: 0, height: 0, rotate: text_angle }
-                        : { align: 22, x: Math.round(mx1 + (mx2 - mx1) * 0.1), y: Math.round(my - 2 - text_size), width: Math.round((mx2 - mx1) * 0.8), height: text_size };
-                     arg.text = (cont === Math.round(cont)) ? cont.toString() : floatToString(cont, gStyle.fPaintTextFormat);
-                     arg.color = text_col;
-                     arg.latex = 0;
-                     if (funcs.swap_xy) {
-                        arg.x = my;
-                        arg.y = Math.round(midx - text_size/2);
-                     }
-                     this.drawText(arg);
-                  }
-               }
+               if (cont !== 0) {
+                  const lbl = (cont === Math.round(cont)) ? cont.toString() : floatToString(cont, gStyle.fPaintTextFormat);
 
-               if (show_line) {
-                  if (funcs.swap_xy)
-                     path_line += (path_line ? 'L' : 'M') + `${my},${midx}`; // no optimization
-                  else if (path_line.length === 0)
-                     path_line = `M${midx},${my}`;
-                  else if (lx === midx)
-                     path_line += `v${my-ly}`;
-                  else if (ly === my)
-                     path_line += `h${midx-lx}`;
+                  if (text_angle)
+                     this.drawText({ align: 12, x: midx, y: Math.round(my - 2 - text_size/5), width: 0, height: 0, rotate: text_angle, text: lbl, color: text_col, latex: 0 });
                   else
-                     path_line += `l${midx-lx},${my-ly}`;
-                  lx = midx; ly = my;
-               } else if (show_curve)
-                  grpnts.push({ grx: (mx1 + mx2) / 2, gry: funcs.gry(bincont) });
-
-               if (draw_markers) {
-                  if ((my >= -yerr1) && (my <= height + yerr2)) {
-                     if (path_fill !== null)
-                        path_fill += `M${mx1},${my-yerr1}h${mx2-mx1}v${yerr1+yerr2+1}h${mx1-mx2}z`;
-                     if ((path_marker !== null) && do_marker)
-                        draw_marker();
-                     if ((path_err !== null) && do_err)
-                        draw_errbin();
-                  }
+                     this.drawText({ align: 22, x: Math.round(mx1 + (mx2-mx1)*0.1), y: Math.round(my-2-text_size), width: Math.round((mx2-mx1)*0.8), height: text_size, text: lbl, color: text_col, latex: 0 });
                }
             }
-         };
 
-         // check if we should draw markers or error marks directly, skipping optimization
-         if (do_marker || do_err) {
-            if (!settings.OptimizeDraw || ((right-left < 50000) && (settings.OptimizeDraw === 1))) {
-               for (i = left; i < right; ++i) {
-                  if (extract_bin(i)) {
-                     if (path_marker !== null)
-                        draw_marker();
-                     if (path_err !== null)
-                        draw_errbin();
+            if (show_line) {
+               if (path_line.length === 0)
+                  path_line = `M${midx},${my}`;
+               else if (lx === midx)
+                  path_line += `v${my-ly}`;
+               else if (ly === my)
+                  path_line += `h${midx-lx}`;
+               else
+                  path_line += `l${midx-lx},${my-ly}`;
+               lx = midx; ly = my;
+            } else if (show_curve)
+               grpnts.push({ grx: (mx1 + mx2) / 2, gry: funcs.gry(bincont) });
+
+            if (draw_markers) {
+               if ((my >= -yerr1) && (my <= height + yerr2)) {
+                  if (path_fill !== null)
+                     path_fill += `M${mx1},${my-yerr1}h${mx2-mx1}v${yerr1+yerr2+1}h${mx1-mx2}z`;
+                  if ((path_marker !== null) && do_marker) {
+                     path_marker += this.markeratt.create(midx, my);
+                     if (hints_marker !== null)
+                        hints_marker += `M${midx-hsz},${my-hsz}h${2*hsz}v${2*hsz}h${-2*hsz}z`;
                   }
+
+                  if ((path_err !== null) && do_err)
+                     draw_errbin();
                }
-               do_err = do_marker = false;
             }
          }
+      };
 
-         for (i = left; i <= right; ++i) {
-            x = xaxis.GetBinLowEdge(i+1);
-
-            if (this.logx && (x <= 0)) continue;
-
-            grx = Math.round(funcs.grx(x));
-
-            lastbin = (i === right);
-
-            if (lastbin && (left<right))
-               gry = curry;
-            else {
-               y = histo.getBinContent(i+1);
-               gry = Math.round(funcs.gry(y));
-            }
-
-            if (res.length === 0) {
-               bestimin = bestimax = i;
-               prevx = startx = currx = grx;
-               prevy = curry_min = curry_max = curry = gry;
-               res = `M${currx},${curry}`;
-            } else if (use_minmax) {
-               if ((grx === currx) && !lastbin) {
-                  if (gry < curry_min)
-                     bestimax = i;
-                  else if (gry > curry_max)
-                     bestimin = i;
-
-                  curry_min = Math.min(curry_min, gry);
-                  curry_max = Math.max(curry_max, gry);
-                  curry = gry;
-               } else {
-                  if (draw_any_but_hist) {
-                     if (bestimin === bestimax)
-                        draw_bin(bestimin);
-                     else if (bestimin < bestimax) {
-                        draw_bin(bestimin); draw_bin(bestimax);
-                     } else {
-                        draw_bin(bestimax); draw_bin(bestimin);
-                     }
-                  }
-
-                  // when several points at same X differs, need complete logic
-                  if (draw_hist && ((curry_min !== curry_max) || (prevy !== curry_min))) {
-                     if (prevx !== currx)
-                        res += 'h'+(currx-prevx);
-
-                     if (curry === curry_min) {
-                        if (curry_max !== prevy)
-                           res += 'v' + (curry_max - prevy);
-                        if (curry_min !== curry_max)
-                           res += 'v' + (curry_min - curry_max);
-                     } else {
-                        if (curry_min !== prevy)
-                           res += 'v' + (curry_min - prevy);
-                        if (curry_max !== curry_min)
-                           res += 'v' + (curry_max - curry_min);
-                        if (curry !== curry_max)
-                        res += 'v' + (curry - curry_max);
-                     }
-
-                     prevx = currx;
-                     prevy = curry;
-                  }
-
-                  if (lastbin && (prevx !== grx))
-                     res += 'h' + (grx-prevx);
-
-                  bestimin = bestimax = i;
-                  curry_min = curry_max = curry = gry;
-                  currx = grx;
+      // check if we should draw markers or error marks directly, skipping optimization
+      if (do_marker || do_err) {
+         if (!settings.OptimizeDraw || ((right-left < 50000) && (settings.OptimizeDraw === 1))) {
+            for (i = left; i < right; ++i) {
+               if (extract_bin(i)) {
+                  if (path_marker !== null)
+                     path_marker += this.markeratt.create(midx, my);
+                  if (hints_marker !== null)
+                     hints_marker += `M${midx-hsz},${my-hsz}h${2*hsz}v${2*hsz}h${-2*hsz}z`;
+                  if (path_err !== null)
+                     draw_errbin();
                }
-               // end of use_minmax
-            } else if ((gry !== curry) || lastbin) {
-               if (grx !== currx) res += `h${grx-currx}`;
-               if (gry !== curry) res += `v${gry-curry}`;
+            }
+            do_err = do_marker = false;
+         }
+      }
+
+
+      for (i = left; i <= right; ++i) {
+         x = xaxis.GetBinLowEdge(i+1);
+
+         if (this.logx && (x <= 0)) continue;
+
+         grx = Math.round(funcs.grx(x));
+
+         lastbin = (i === right);
+
+         if (lastbin && (left<right))
+            gry = curry;
+          else {
+            y = histo.getBinContent(i+1);
+            gry = Math.round(funcs.gry(y));
+         }
+
+         if (res.length === 0) {
+            bestimin = bestimax = i;
+            prevx = startx = currx = grx;
+            prevy = curry_min = curry_max = curry = gry;
+            res = `M${currx},${curry}`;
+         } else if (use_minmax) {
+            if ((grx === currx) && !lastbin) {
+               if (gry < curry_min)
+                  bestimax = i;
+               else if (gry > curry_max)
+                  bestimin = i;
+
+               curry_min = Math.min(curry_min, gry);
+               curry_max = Math.max(curry_max, gry);
                curry = gry;
+            } else {
+               if (draw_any_but_hist) {
+                  if (bestimin === bestimax)
+                     draw_bin(bestimin);
+                  else if (bestimin < bestimax) {
+                     draw_bin(bestimin); draw_bin(bestimax);
+                  } else {
+                     draw_bin(bestimax); draw_bin(bestimin);
+                  }
+               }
+
+               // when several points at same X differs, need complete logic
+               if (draw_hist && ((curry_min !== curry_max) || (prevy !== curry_min))) {
+                  if (prevx !== currx)
+                     res += 'h'+(currx-prevx);
+
+                  if (curry === curry_min) {
+                     if (curry_max !== prevy)
+                        res += 'v' + (curry_max - prevy);
+                     if (curry_min !== curry_max)
+                        res += 'v' + (curry_min - curry_max);
+                  } else {
+                     if (curry_min !== prevy)
+                        res += 'v' + (curry_min - prevy);
+                     if (curry_max !== curry_min)
+                        res += 'v' + (curry_max - curry_min);
+                     if (curry !== curry_max)
+                       res += 'v' + (curry - curry_max);
+                  }
+
+                  prevx = currx;
+                  prevy = curry;
+               }
+
+               if (lastbin && (prevx !== grx))
+                  res += 'h' + (grx-prevx);
+
+               bestimin = bestimax = i;
+               curry_min = curry_max = curry = gry;
                currx = grx;
             }
+            // end of use_minmax
+         } else if ((gry !== curry) || lastbin) {
+            if (grx !== currx) res += `h${grx-currx}`;
+            if (gry !== curry) res += `v${gry-curry}`;
+            curry = gry;
+            currx = grx;
          }
+      }
 
-         const fill_for_interactive = want_tooltip && this.fillatt.empty() && draw_hist && !draw_markers && !show_line && !show_curve,
-         add_hist = () => {
+      const fill_for_interactive = want_tooltip && this.fillatt.empty() && draw_hist && !draw_markers && !show_line && !show_curve,
+      add_hist = () => {
+         this.draw_g.append('svg:path')
+                    .attr('d', res + ((!this.fillatt.empty() || fill_for_interactive) ? close_path : ''))
+                    .style('stroke-linejoin', 'miter')
+                    .call(this.lineatt.func)
+                    .call(this.fillatt.func);
+      };
+      let h0 = height + 3;
+      if (!fill_for_interactive) {
+         const gry0 = Math.round(funcs.gry(0));
+         if (gry0 <= 0)
+            h0 = -3;
+         else if (gry0 < height)
+            h0 = gry0;
+      }
+      const close_path = `L${currx},${h0}H${startx}Z`;
+
+      if (res && draw_hist && !this.fillatt.empty()) {
+         add_hist();
+         res = '';
+      }
+
+      if (draw_markers || show_line || show_curve) {
+         if (!path_line && grpnts.length)
+            path_line = buildSvgCurve(grpnts);
+
+         if (path_fill) {
             this.draw_g.append('svg:path')
-                     .attr('d', res + ((!this.fillatt.empty() || fill_for_interactive) ? close_path : ''))
-                     .style('stroke-linejoin', 'miter')
-                     .call(this.lineatt.func)
-                     .call(this.fillatt.func);
-         };
-         let h0 = height + 3;
-         if (!fill_for_interactive) {
-            const gry0 = Math.round(funcs.gry(0));
-            if (gry0 <= 0)
-               h0 = -3;
-            else if (gry0 < height)
-               h0 = gry0;
-         }
-         const close_path = `L${currx},${h0}H${startx}Z`;
-
-         if (res && draw_hist && !this.fillatt.empty()) {
-            add_hist();
-            res = '';
+                       .attr('d', path_fill)
+                       .call(this.fillatt.func);
+         } else if (path_line && !this.fillatt.empty() && !draw_hist) {
+            this.draw_g.append('svg:path')
+                .attr('d', path_line + `L${midx},${h0}H${startmidx}Z`)
+                .call(this.fillatt.func);
          }
 
-         if (draw_markers || show_line || show_curve) {
-            if (!path_line && grpnts.length) {
-               if (funcs.swap_xy)
-                  grpnts.forEach(pnt => { const d = pnt.grx; pnt.grx = pnt.gry; pnt.gry = d; });
-               path_line = buildSvgCurve(grpnts);
-            }
-
-            if (path_fill) {
-               this.draw_g.append('svg:path')
-                        .attr('d', path_fill)
-                        .call(this.fillatt.func);
-            } else if (path_line && !this.fillatt.empty() && !draw_hist) {
-               this.draw_g.append('svg:path')
-                  .attr('d', path_line + `L${midx},${h0}H${startmidx}Z`)
-                  .call(this.fillatt.func);
-            }
-
-            if (path_err) {
-               this.draw_g.append('svg:path')
-                  .attr('d', path_err)
-                  .call(this.lineatt.func);
-            }
-
-            if (hints_err) {
-               this.draw_g.append('svg:path')
-                  .attr('d', hints_err)
-                  .style('fill', 'none')
-                  .style('pointer-events', this.isBatchMode() ? null : 'visibleFill');
-            }
-
-            if (path_line) {
-               this.draw_g.append('svg:path')
-                  .attr('d', path_line)
-                  .style('fill', 'none')
-                  .call(this.lineatt.func);
-            }
-
-            if (path_marker) {
-               this.draw_g.append('svg:path')
-                  .attr('d', path_marker)
-                  .call(this.markeratt.func);
-            }
-
-            if (hints_marker) {
-               this.draw_g.append('svg:path')
-                  .attr('d', hints_marker)
-                  .style('fill', 'none')
-                  .style('pointer-events', this.isBatchMode() ? null : 'visibleFill');
-            }
+         if (path_err) {
+             this.draw_g.append('svg:path')
+                   .attr('d', path_err)
+                   .call(this.lineatt.func);
          }
 
-         if (res && draw_hist)
-            add_hist();
+         if (hints_err) {
+               this.draw_g.append('svg:path')
+                   .attr('d', hints_err)
+                   .style('fill', 'none')
+                   .style('pointer-events', this.isBatchMode() ? null : 'visibleFill');
+         }
 
-         if (show_text)
-            return this.finishTextDrawing();
-      });
+         if (path_line) {
+            this.draw_g.append('svg:path')
+                   .attr('d', path_line)
+                   .style('fill', 'none')
+                   .call(this.lineatt.func);
+         }
+
+         if (path_marker) {
+            this.draw_g.append('svg:path')
+                .attr('d', path_marker)
+                .call(this.markeratt.func);
+         }
+
+         if (hints_marker) {
+            this.draw_g.append('svg:path')
+                .attr('d', hints_marker)
+                .style('fill', 'none')
+                .style('pointer-events', this.isBatchMode() ? null : 'visibleFill');
+         }
+      }
+
+      if (res && draw_hist)
+         add_hist();
+
+      if (show_text)
+         return this.finishTextDrawing();
    }
 
    /** @summary Draw TH1 bins in SVG element
@@ -1033,7 +985,7 @@ class TH1Painter extends THistPainter {
 
          gapx = 0;
 
-         gry1 = this.getBarBaseline(funcs, height);
+         gry1 = Math.round(funcs.gry(((this.options.BaseLine !== false) && (this.options.BaseLine > funcs.scale_ymin)) ? this.options.BaseLine : funcs.scale_ymin));
 
          if (gry1 > gry2)
             [gry1, gry2] = [gry2, gry1];
@@ -1095,7 +1047,7 @@ class TH1Painter extends THistPainter {
             findbin = null;
          else if ((pnt_x < grx1 - gapx) || (pnt_x > grx2 + gapx))
             findbin = null; // if bars option used check that bar is not match
-         else if (!this.options.Zero && (histo.getBinContent(findbin+1) === 0) && (!histo.fSumw2 || !histo.fSumw2[findbin+1]))
+         else if (!this.options.Zero && (histo.getBinContent(findbin+1) === 0))
             findbin = null; // exclude empty bin if empty bins suppressed
       }
 
@@ -1255,7 +1207,7 @@ class TH1Painter extends THistPainter {
       let min = histo.getBinContent(left + 1);
       for (let indx = left; indx < right; ++indx)
          min = Math.min(min, histo.getBinContent(indx+1));
-      if (min > 0) return; // if all points positive, no chance for auto-scale
+      if (min > 0) return; // if all points positive, no chance for autoscale
 
       while ((left < right) && (histo.getBinContent(left+1) <= min)) ++left;
       while ((left < right) && (histo.getBinContent(right) <= min)) --right;
@@ -1293,10 +1245,10 @@ class TH1Painter extends THistPainter {
 
    /** @summary Performs 2D drawing of histogram
      * @return {Promise} when ready */
-   async draw2D(reason) {
+   async draw2D(/* reason */) {
       this.clear3DScene();
 
-      this.scanContent(reason === 'zoom');
+      this.scanContent(true);
 
       const pr = this.isMainPainter() ? this.drawColorPalette(false) : Promise.resolve(true);
 

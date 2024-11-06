@@ -1,5 +1,6 @@
 import { settings, gStyle, clTMultiGraph, kNoZoom } from '../core.mjs';
-import { getMaterialArgs, THREE } from '../base/base3d.mjs';
+import { Vector2, BufferGeometry, BufferAttribute, Mesh, MeshBasicMaterial, ShapeUtils } from '../three.mjs';
+import { getMaterialArgs } from '../base/base3d.mjs';
 import { assignFrame3DMethods, drawBinsLego, drawBinsError3D, drawBinsContour3D, drawBinsSurf3D } from './hist3d.mjs';
 import { TAxisPainter } from '../gpad/TAxisPainter.mjs';
 import { THistPainter } from '../hist2d/THistPainter.mjs';
@@ -69,7 +70,7 @@ function drawTH2PolyLego(painter) {
                if (vert > 0)
                   dist2 = (currx-lastx)*(currx-lastx) + (curry-lasty)*(curry-lasty);
                if (dist2 > dist2limit) {
-                  pnts.push(new THREE.Vector2(currx, curry));
+                  pnts.push(new Vector2(currx, curry));
                   lastx = currx;
                   lasty = curry;
                }
@@ -77,7 +78,7 @@ function drawTH2PolyLego(painter) {
 
             try {
                if (pnts.length > 2)
-                  faces = THREE.ShapeUtils.triangulateShape(pnts, []);
+                  faces = ShapeUtils.triangulateShape(pnts, []);
             } catch (e) {
                faces = null;
             }
@@ -161,12 +162,12 @@ function drawTH2PolyLego(painter) {
          }
       }
 
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(pos, 3));
       geometry.computeVertexNormals();
 
-      const material = new THREE.MeshBasicMaterial(getMaterialArgs(painter._color_palette?.getColor(colindx), { vertexColors: false })),
-            mesh = new THREE.Mesh(geometry, material);
+      const material = new MeshBasicMaterial(getMaterialArgs(painter._color_palette?.getColor(colindx), { vertexColors: false })),
+            mesh = new Mesh(geometry, material);
 
       pmain.add3DMesh(mesh);
 
@@ -219,10 +220,7 @@ class TH2Painter extends TH2Painter2D {
                logz = pad?.fLogv ?? pad?.fLogz;
          let zmult = 1;
 
-         if (this.options.ohmin && this.options.ohmax) {
-            this.zmin = this.options.hmin;
-            this.zmax = this.options.hmax;
-         } else if (this.options.minimum !== kNoZoom && this.options.maximum !== kNoZoom) {
+         if (this.options.minimum !== kNoZoom && this.options.maximum !== kNoZoom) {
             this.zmin = this.options.minimum;
             this.zmax = this.options.maximum;
          } else if (this.draw_content || (this.gmaxbin !== 0)) {

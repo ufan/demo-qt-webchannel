@@ -1,6 +1,6 @@
 import { select as d3_select, drag as d3_drag } from '../d3.mjs';
-import { browser, internals, toJSON, settings, isObject, isFunc, isStr, nsSVG, btoa_func } from '../core.mjs';
-import { compressSVG, BasePainter, svgToImage } from '../base/BasePainter.mjs';
+import { browser, internals, toJSON, settings, isObject, isFunc, isStr } from '../core.mjs';
+import { compressSVG, BasePainter } from '../base/BasePainter.mjs';
 import { getElementCanvPainter, selectActivePad, cleanup, resize, ObjectPainter } from '../base/ObjectPainter.mjs';
 import { createMenu } from './menu.mjs';
 import { detectRightButton, injectStyle } from './utils.mjs';
@@ -63,7 +63,7 @@ class MDIDisplay extends BasePainter {
       console.warn(`forEachFrame not implemented in MDIDisplay ${typeof userfunc} ${only_visible}`);
    }
 
-   /** @summary method dedicated to iterate over existing panels
+   /** @summary method dedicated to iterate over existing panles
      * @param {function} userfunc is called with arguments (painter, frame)
      * @param {boolean} only_visible let select only visible frames */
    forEachPainter(userfunc, only_visible) {
@@ -79,7 +79,7 @@ class MDIDisplay extends BasePainter {
       return cnt;
    }
 
-   /** @summary Search for the frame using item name */
+   /** @summary Serach for the frame using item name */
    findFrame(searchtitle, force) {
       let found_frame = null;
 
@@ -358,7 +358,7 @@ class GridDisplay extends MDIDisplay {
       }
    }
 
-   /** @summary Handle interactive separator movement
+   /** @summary Handle interactive sepearator movement
      * @private */
    handleSeparator(elem, action) {
       const findGroup = (node, grid) => {
@@ -512,8 +512,9 @@ class GridDisplay extends MDIDisplay {
          return this.getGridFrame();
 
       let found = super.getActiveFrame();
-      if (!found)
-         this.forEachFrame(frame => { if (!found) found = frame; });
+      if (found) return found;
+
+      this.forEachFrame(frame => { if (!found) found = frame; });
 
       return found;
    }
@@ -643,7 +644,7 @@ class TabsDisplay extends MDIDisplay {
       }
    }
 
-   /** @summary activate frame */
+   /** @summary actiavte frame */
    activateFrame(frame) {
       if (frame)
          this.modifyTabsFrame(d3_select(frame).property('frame_id'), 'activate');
@@ -770,7 +771,7 @@ class FlexibleDisplay extends MDIDisplay {
       return found;
    }
 
-   /** @summary activate frame */
+   /** @summary actiavte frame */
    activateFrame(frame) {
       if ((frame === 'first') || (frame === 'last')) {
          let res = null;
@@ -899,7 +900,7 @@ class FlexibleDisplay extends MDIDisplay {
       if (kind.t === 'close') {
          this.cleanupFrame(frame);
          main.remove();
-         this.activateFrame('last'); // set active as last non-minified window
+         this.activateFrame('last'); // set active as last non-minfied window
          return;
       }
 
@@ -947,7 +948,6 @@ class FlexibleDisplay extends MDIDisplay {
          .style('box-shadow', '1px 1px 2px 2px #aaa')
          .property('state', 'normal')
          .select('.jsroot_flex_header')
-         .on('contextmenu', evnt => mdi.showContextMenu(evnt, true))
          .on('click', function() { mdi.activateFrame(d3_select(this.parentNode).select('.jsroot_flex_draw').node()); })
          .selectAll('button')
          .data([{ n: '&#x2715;', t: 'close' }, { n: '&#x2594;', t: 'maximize' }, { n: '&#x2581;', t: 'minimize' }])
@@ -1098,13 +1098,9 @@ class FlexibleDisplay extends MDIDisplay {
    }
 
    /** @summary context menu */
-   showContextMenu(evnt, is_header) {
-      // no context menu for no windows
-      if (this.numDraw() === 0)
-         return;
-      // handle context menu only for MDI area or for window header
-      if (!is_header && evnt.target.getAttribute('class') !== 'jsroot_flex_top')
-         return;
+   showContextMenu(evnt) {
+      // handle context menu only for MDI area
+      if ((evnt.target.getAttribute('class') !== 'jsroot_flex_top') || (this.numDraw() === 0)) return;
 
       evnt.preventDefault();
 
@@ -1119,7 +1115,7 @@ class FlexibleDisplay extends MDIDisplay {
       arr.sort((f1, f2) => (d3_select(f1).property('frame_cnt') < d3_select(f2).property('frame_cnt') ? -1 : 1));
 
       createMenu(evnt, this).then(menu => {
-         menu.header('Flex');
+         menu.add('header:Flex');
          menu.add('Cascade', () => this.sortFrames('cascade'), 'Cascade frames');
          menu.add('Tile', () => this.sortFrames('tile'), 'Tile all frames');
          if (nummin < arr.length)
@@ -1127,7 +1123,7 @@ class FlexibleDisplay extends MDIDisplay {
          if (nummin > 0)
             menu.add('Show all', () => this.showAll(), 'Restore minimized frames');
          menu.add('Close all', () => this.closeAllFrames());
-         menu.separator();
+         menu.add('separator');
 
          arr.forEach((f, i) => menu.addchk((f===active), ((this.getFrameState(f) === 'min') ? '[min] ' : '') + d3_select(f).attr('frame_title'), i,
                       arg => {
@@ -1156,8 +1152,8 @@ class BatchDisplay extends MDIDisplay {
    constructor(width, height, jsdom_body) {
       super('$batch$');
       this.frames = []; // array of configured frames
-      this.width = width || settings.CanvasWidth;
-      this.height = height || settings.CanvasHeight;
+      this.width = width || 1200;
+      this.height = height || 800;
       this.jsdom_body = jsdom_body || d3_select('body'); // d3 body handle
    }
 
@@ -1183,57 +1179,33 @@ class BatchDisplay extends MDIDisplay {
       return this.afterCreateFrame(frame.node());
    }
 
-   /** @summary Create final frame */
-   createFinalBatchFrame() {
-      const cnt = this.numFrames(), prs = [];
-
-      for (let n = 0; n < cnt; ++n) {
-         const json = this.makeJSON(n, 1, true);
-         if (json)
-            d3_select(this.frames[n]).text('json:' + btoa_func(json));
-         else
-            prs.push(this.makeSVG(n, true));
-      }
-
-      return Promise.all(prs).then(() => {
-         this.jsdom_body.append('div')
-             .attr('id', 'jsroot_batch_final')
-             .html(`${cnt}`);
-      });
-   }
-
    /** @summary Returns number of created frames */
    numFrames() { return this.frames.length; }
 
    /** @summary returns JSON representation if any
      * @desc Now works only for inspector, can be called once */
-   makeJSON(id, spacing, keep_frame) {
+   makeJSON(id, spacing) {
       const frame = this.frames[id];
       if (!frame) return;
       const obj = d3_select(frame).property('_json_object_');
       if (obj) {
          d3_select(frame).property('_json_object_', null);
          cleanup(frame);
-         if (!keep_frame)
-            d3_select(frame).remove();
+         d3_select(frame).remove();
          return toJSON(obj, spacing);
       }
    }
 
    /** @summary Create SVG for specified frame id */
-   makeSVG(id, keep_frame) {
+   makeSVG(id) {
       const frame = this.frames[id];
       if (!frame) return;
-      const main = d3_select(frame),
-            mainsvg = main.select('svg');
-      if (mainsvg.empty())
-         return;
-
-      mainsvg.attr('xmlns', nsSVG)
-             .attr('title', null).attr('style', null).attr('class', null).attr('x', null).attr('y', null);
-
-      if (!mainsvg.attr('width') && !mainsvg.attr('height'))
-            mainsvg.attr('width', this.width).attr('height', this.height);
+      const main = d3_select(frame);
+      main.select('svg')
+          .attr('xmlns', 'http://www.w3.org/2000/svg')
+          .attr('width', this.width)
+          .attr('height', this.height)
+          .attr('title', null).attr('style', null).attr('class', null).attr('x', null).attr('y', null);
 
       function clear_element() {
          const elem = d3_select(this);
@@ -1242,15 +1214,6 @@ class BatchDisplay extends MDIDisplay {
 
       main.selectAll('g.root_frame').each(clear_element);
       main.selectAll('svg').each(clear_element);
-
-      if (internals.batch_png) {
-         return svgToImage(compressSVG(main.html()), 'png').then(href => {
-            d3_select(this.frames[id]).text('png:' + href);
-         });
-      }
-
-      if (keep_frame)
-         return true;
 
       const svg = compressSVG(main.html());
 
@@ -1275,7 +1238,7 @@ class BrowserLayout {
    /** @summary Constructor */
    constructor(id, hpainter, objpainter) {
       this.gui_div = id;
-      this.hpainter = hpainter; // painter for browser area (if any)
+      this.hpainter = hpainter; // painter for brwoser area (if any)
       this.objpainter = objpainter; // painter for object area (if any)
       this.browser_kind = null; // should be 'float' or 'fix'
    }
@@ -1512,8 +1475,8 @@ class BrowserLayout {
       const frame_titles = ['object name', 'object title', 'mouse coordinates', 'object info'];
       for (let k = 0; k < 4; ++k) {
          d3_select(this.status_layout.getGridFrame(k))
-           .attr('title', frame_titles[k]).style('overflow', 'hidden').style('display', 'flex').style('align-items', 'center')
-           .append('label').attr('style', 'margin: 5px 5px 5px 3px; font-size: 14px; white-space: nowrap;');
+           .attr('title', frame_titles[k]).style('overflow', 'hidden')
+           .append('label').attr('style', 'margin: 3px; margin-left: 5px; font-size: 14px; vertical-align: middle; white-space: nowrap;');
       }
 
       internals.showStatus = this.status_handler = this.showStatus.bind(this);

@@ -1,6 +1,6 @@
 import { gStyle, BIT, settings, constants, create, isObject, isFunc, isStr, getPromise,
-         clTList, clTPaveText, clTPaveStats, clTPaletteAxis, clTProfile, clTProfile2D, clTProfile3D, clTPad,
-         clTAxis, clTF1, clTF2, kNoZoom, clTCutG, kNoStats, kTitle } from '../core.mjs';
+         clTList, clTPaveText, clTPaveStats, clTPaletteAxis, clTProfile2D, clTProfile3D, clTPad,
+         clTAxis, clTF1, clTF2, clTProfile, kNoZoom, clTCutG, kNoStats, kTitle } from '../core.mjs';
 import { getColor, getColorPalette } from '../base/colors.mjs';
 import { DrawOptions } from '../base/BasePainter.mjs';
 import { ObjectPainter, EAxisBits, kAxisTime, kAxisLabels } from '../base/ObjectPainter.mjs';
@@ -12,8 +12,7 @@ const kCARTESIAN = 1, kPOLAR = 2, kCYLINDRICAL = 3, kSPHERICAL = 4, kRAPIDITY = 
 
 /**
  * @summary Class to decode histograms draw options
- * @desc All options started from capital letter are major drawing options
- * any other draw options are internal settings.
+ *
  * @private
  */
 
@@ -34,11 +33,11 @@ class THistDrawOptions {
               Lego: 0, Surf: 0, Off: 0, Tri: 0, Proj: 0, AxisPos: 0, Ortho: gStyle.fOrthoCamera,
               Spec: false, Pie: false, List: false, Zscale: false, Zvert: true, PadPalette: false,
               Candle: '', Violin: '', Scaled: null, Circular: 0,
-              GLBox: 0, GLColor: false, Project: '', ProfileProj: '', Profile2DProj: '', System: kCARTESIAN,
+              GLBox: 0, GLColor: false, Project: '', System: kCARTESIAN,
               AutoColor: false, NoStat: false, ForceStat: false, PadStats: false, PadTitle: false, AutoZoom: false,
-              HighRes: 0, Zero: 1, Palette: 0, BaseLine: false, ShowEmpty: false,
+              HighRes: 0, Zero: 1, Palette: 0, BaseLine: false,
               Optimize: settings.OptimizeDraw, adjustFrame: false,
-              Mode3D: false, x3dscale: 1, y3dscale: 1, SwapXY: false,
+              Mode3D: false, x3dscale: 1, y3dscale: 1,
               Render3D: constants.Render3D.Default,
               FrontBox: true, BackBox: true,
               need_fillcol: false,
@@ -50,7 +49,7 @@ class THistDrawOptions {
 
    is3d() { return this.Lego || this.Surf; }
 
-   /** @summary Base on sumw2 values (re)set some basic draw options, only for 1dim hist */
+   /** @summary Base on sumw2 values (re)set some bacis draw options, only for 1dim hist */
    decodeSumw2(histo, force) {
       const len = histo.fSumw2?.length ?? 0;
       let isany = false;
@@ -113,7 +112,7 @@ class THistDrawOptions {
 
       if (d.check('PAL', true))
          this.Palette = d.partAsInt();
-      // this is zooming of histogram content
+      // this is zooming of histo content
       if (d.check('MINIMUM:', true)) {
          this.ominimum = true;
          this.minimum = parseFloat(d.part);
@@ -142,7 +141,7 @@ class THistDrawOptions {
          this.ohmax = false;
          delete this.hmax;
       }
-      this.zoom_min_max = d.check('ZOOM_MIN_MAX');
+      this.ignore_min_max = d.check('IGNORE_MIN_MAX');
 
       // let configure histogram titles - only for debug purposes
       if (d.check('HTITLE:', true)) histo.fTitle = decodeURIComponent(d.part.toLowerCase());
@@ -151,8 +150,6 @@ class THistDrawOptions {
       if (d.check('ZTITLE:', true)) histo.fZaxis.fTitle = decodeURIComponent(d.part.toLowerCase());
 
       if (d.check('_ADJUST_FRAME_')) this.adjustFrame = true;
-
-      if (d.check('SHOWEMPTY')) this.ShowEmpty = true;
 
       if (d.check('NOOPTIMIZE')) this.Optimize = 0;
       if (d.check('OPTIMIZE')) this.Optimize = 2;
@@ -192,7 +189,7 @@ class THistDrawOptions {
       if (ly && pad) { pad.fLogy = ly; pad.fUymin = 0; pad.fUymax = 1; pad.fY1 = 0; pad.fY2 = 1; }
       if (d.check('LOG2Z') && pad) pad.fLogz = 2;
       if (d.check('LOGZ') && pad) pad.fLogz = 1;
-      if (d.check('LOGV') && pad) pad.fLogv = 1; // fictional member, can be introduced in ROOT
+      if (d.check('LOGV') && pad) pad.fLogv = 1; // ficitional member, can be introduced in ROOT
       if (d.check('GRIDXY') && pad) pad.fGridx = pad.fGridy = 1;
       if (d.check('GRIDX') && pad) pad.fGridx = 1;
       if (d.check('GRIDY') && pad) pad.fGridy = 1;
@@ -327,10 +324,6 @@ class THistDrawOptions {
       if (d.check('CHAR')) this.Char = 1;
       if (d.check('ALLFUNC')) this.AllFunc = true;
       if (d.check('FUNC')) { this.Func = true; this.Hist = false; }
-      if (d.check('HAXISG')) { this.Axis = 3; this.SwapXY = 1; }
-      if (d.check('HAXIS')) { this.Axis = 1; this.SwapXY = 1; }
-      if (d.check('HAXIG')) { this.Axis = 2; this.SwapXY = 1; }
-      if (d.check('AXISG')) this.Axis = 3;
       if (d.check('AXIS')) this.Axis = 1;
       if (d.check('AXIG')) this.Axis = 2;
 
@@ -365,22 +358,8 @@ class THistDrawOptions {
       if (d.check('MOLLWEIDE')) this.Proj = 5;
       if (this.Proj > 0) this.Contour = 14;
 
-      if (d.check('PROJXY', true)) {
-         let flag = true;
-         if ((histo?._typename === clTProfile2D) && d.part && !Number.isInteger(Number.parseInt(d.part))) {
-            this.Profile2DProj = d.part;
-            flag = d.check('PROJXY', true); // allow projxy with projected profile2d
-         }
-         if (flag)
-            this.Project = 'XY' + d.partAsInt(0, 1);
-      }
-
-      if (d.check('PROJX', true)) {
-         if (histo?._typename === clTProfile)
-            this.ProfileProj = d.part || 'B';
-         else
-            this.Project = 'X' + d.part;
-      }
+      if (d.check('PROJXY', true)) this.Project = 'XY' + d.partAsInt(0, 1);
+      if (d.check('PROJX', true)) this.Project = 'X' + d.part;
       if (d.check('PROJY', true)) this.Project = 'Y' + d.part;
       if (d.check('PROJ')) this.Project = 'Y1';
 
@@ -420,9 +399,6 @@ class THistDrawOptions {
       check_axis_bit('MLX', 'fXaxis', EAxisBits.kMoreLogLabels);
       check_axis_bit('MLY', 'fYaxis', EAxisBits.kMoreLogLabels);
       check_axis_bit('MLZ', 'fZaxis', EAxisBits.kMoreLogLabels);
-      check_axis_bit('NOEX', 'fXaxis', EAxisBits.kNoExponent);
-      check_axis_bit('NOEY', 'fYaxis', EAxisBits.kNoExponent);
-      check_axis_bit('NOEZ', 'fZaxis', EAxisBits.kNoExponent);
 
       if (d.check('RX') || pad?.$RX) this.RevX = true;
       if (d.check('RY') || pad?.$RY) this.RevY = true;
@@ -498,11 +474,6 @@ class THistDrawOptions {
          this.Surf = 13;
    }
 
-   /** @summary Is X/Y swap is configured */
-   swap_xy() {
-      return this.BarStyle >= 20 || this.SwapXY;
-   }
-
    /** @summary Tries to reconstruct string with hist draw options */
    asString(is_main_hist, pad) {
       let res = '', zopt = '';
@@ -575,18 +546,6 @@ class THistDrawOptions {
 
       if (this.is3d() && this.Ortho && is_main_hist)
          res += '_ORTHO';
-
-      if (this.ProfileProj)
-         res += '_PROJX' + this.ProfileProj;
-
-      if (this.Profile2DProj)
-         res += '_PROJXY' + this.Profile2DProj;
-
-      if (this.Proj)
-         res += '_PROJ' + this.Proj;
-
-      if (this.ShowEmpty)
-         res += '_SHOWEMPTY';
 
       if (this.Same)
          res += this.ForceStat ? 'SAMES' : 'SAME';
@@ -688,7 +647,7 @@ class HistContour {
          this.arr.push(this.colzmax);
    }
 
-   /** @summary Configure indices */
+   /** @summary Configure indicies */
    configIndicies(below_min, exact_min) {
       this.below_min_indx = below_min;
       this.exact_min_indx = exact_min;
@@ -697,12 +656,10 @@ class HistContour {
    /** @summary Get index based on z value */
    getContourIndex(zc) {
       // bins less than zmin not drawn
-      if (zc < this.colzmin)
-         return this.below_min_indx;
+      if (zc < this.colzmin) return this.below_min_indx;
 
       // if bin content exactly zmin, draw it when col0 specified or when content is positive
-      if (zc === this.colzmin)
-         return this.exact_min_indx;
+      if (zc === this.colzmin) return this.exact_min_indx;
 
       if (!this.custom)
          return Math.floor(0.01+(zc-this.colzmin)*(this.arr.length-1)/(this.colzmax-this.colzmin));
@@ -734,7 +691,7 @@ class HistContour {
 } // class HistContour
 
 /**
- * @summary Handle for updating of secondary functions
+ * @summary Handle for updateing of secondary functions
  *
  * @private
  */
@@ -834,8 +791,8 @@ class FunctionsHandler {
       func.$main_painter = this.painter;
 
       const promise = TPavePainter.canDraw(func)
-            ? TPavePainter.draw(this.pp, func, fopt)
-            : this.pp.drawObject(this.pp, func, fopt);
+            ? TPavePainter.draw(this.painter.getDom(), func, fopt)
+            : this.pp.drawObject(this.painter.getDom(), func, fopt);
 
       return promise.then(fpainter => {
          fpainter.setSecondaryId(this.painter, func_secondary_id);
@@ -870,6 +827,7 @@ class THistPainter extends ObjectPainter {
       super(dom, histo);
       this.draw_content = true;
       this.nbinsx = this.nbinsy = 0;
+      this.accept_drops = true; // indicate that one can drop other objects like doing Draw('same')
       this.mode3d = false;
    }
 
@@ -957,7 +915,7 @@ class THistPainter extends ObjectPainter {
 
       this.options.decode(opt || histo.fOption, hdim, histo, pp, pad, this);
 
-      this.storeDrawOpt(opt); // opt will be return as default draw option, used in web canvas
+      this.storeDrawOpt(opt); // opt will be return as default draw option, used in webcanvas
    }
 
    /** @summary Copy draw options from other painter */
@@ -989,7 +947,7 @@ class THistPainter extends ObjectPainter {
    scanContent(/* when_axis_changed */) {
       // function will be called once new histogram or
       // new histogram content is assigned
-      // one should find min, max, bins number, content min/max values
+      // one should find min,max,nbins, maxcontent values
       // if when_axis_changed === true specified, content will be scanned after axis zoom changed
    }
 
@@ -1071,7 +1029,7 @@ class THistPainter extends ObjectPainter {
          if (!this.matchObjectType(obj)) return false;
 
          // simple replace of object does not help - one can have different
-         // complex relations between histogram and stat box, histogram and colz axis,
+         // complex relations between histo and stat box, histo and colz axis,
          // one could have THStack or TMultiGraph object
          // The only that could be done is update of content
 
@@ -1087,7 +1045,7 @@ class THistPainter extends ObjectPainter {
          if (histo.TestBit(kIsZoomed) !== obj.TestBit(kIsZoomed))
             histo.InvertBit(kIsZoomed);
 
-         // special treatment for web canvas - also name can be changed
+         // special treatment for webcanvas - also name can be changed
          if (this.snapid !== undefined) {
             histo.fName = obj.fName;
             o._pfc = o._plc = o._pmc = 0; // auto colors should be processed in web canvas
@@ -1170,18 +1128,6 @@ class THistPainter extends ObjectPainter {
       this.histogram_updated = true; // indicate that object updated
 
       return true;
-   }
-
-   /** @summary Access or modify histogram min/max
-    * @private */
-   accessMM(ismin, v) {
-      const name = ismin ? 'minimum' : 'maximum';
-      if (v === undefined)
-         return this.options[name];
-
-      this.options[name] = v;
-
-      this.interactiveRedraw('pad', ismin ? `exec:SetMinimum(${v})` : `exec:SetMaximum(${v})`);
    }
 
    /** @summary Extract axes bins and ranges
@@ -1312,8 +1258,8 @@ class THistPainter extends ObjectPainter {
                     zoom_xmax: this.zoom_xmax,
                     zoom_ymin: this.zoom_ymin,
                     zoom_ymax: this.zoom_ymax,
-                    ymin_nz: this.ymin_nz ?? histo.$ymin_nz,
-                    swap_xy: this.options.swap_xy(),
+                    ymin_nz: this.ymin_nz,
+                    swap_xy: (this.options.BarStyle >= 20),
                     reverse_x: this.options.RevX,
                     reverse_y: this.options.RevY,
                     symlog_x: this.options.SymlogX,
@@ -1393,10 +1339,9 @@ class THistPainter extends ObjectPainter {
          return this;
 
       const histo = this.getHisto(), st = gStyle,
-            draw_title = !histo.TestBit(kNoTitle) && (st.fOptTitle > 0),
-            pp = this.getPadPainter();
+            draw_title = !histo.TestBit(kNoTitle) && (st.fOptTitle > 0);
 
-      let pt = pp.findInPrimitives(kTitle, clTPaveText);
+      let pt = this.getPadPainter()?.findInPrimitives(kTitle, clTPaveText);
 
       if (pt) {
          pt.Clear();
@@ -1408,7 +1353,7 @@ class THistPainter extends ObjectPainter {
       Object.assign(pt, { fName: kTitle, fFillColor: st.fTitleColor, fFillStyle: st.fTitleStyle, fBorderSize: st.fTitleBorderSize,
                           fTextFont: st.fTitleFont, fTextSize: st.fTitleFontSize, fTextColor: st.fTitleTextColor, fTextAlign: st.fTitleAlign });
       if (draw_title) pt.AddText(histo.fTitle);
-      return TPavePainter.draw(pp, pt, 'postitle').then(p => p?.setSecondaryId(this, kTitle));
+      return TPavePainter.draw(this.getDom(), pt, 'postitle');
    }
 
    /** @summary Live change and update of title drawing
@@ -1445,20 +1390,19 @@ class THistPainter extends ObjectPainter {
       return this.findFunction(clTPaveStats, 'stats');
    }
 
-   /** @summary Toggle stat box drawing
+   /** @summary Toggle statbox drawing
      * @private */
    toggleStat(arg) {
-      const pp = this.getPadPainter();
       let stat = this.findStat(), statpainter;
 
       if (!arg) arg = '';
 
       if (!stat) {
          if (arg.indexOf('-check') > 0) return false;
-         // when stat box created first time, one need to draw it
+         // when statbox created first time, one need to draw it
          stat = this.createStat(true);
       } else
-         statpainter = pp.findPainterFor(stat);
+         statpainter = this.getPadPainter()?.findPainterFor(stat);
 
 
       if (arg === 'only-check')
@@ -1484,8 +1428,9 @@ class THistPainter extends ObjectPainter {
          statpainter.redraw();
          has_stats = statpainter.Enabled;
       } else {
+         const prev_name = this.selectCurrentPad(this.getPadName());
          // return promise which will be used to process
-         has_stats = TPavePainter.draw(pp, stat);
+         has_stats = TPavePainter.draw(this.getDom(), stat).then(() => this.selectCurrentPad(prev_name));
       }
 
       this.processOnlineChange(`exec:SetBit(TH1::kNoStats,${has_stats ? 0 : 1})`, this);
@@ -1493,7 +1438,7 @@ class THistPainter extends ObjectPainter {
       return has_stats;
    }
 
-   /** @summary Returns true if stats box fill can be ignored */
+   /** @summary Returns true if stats box fill can be ingored */
    isIgnoreStatsFill() {
       return !this.getObject() || (!this.draw_content && !this.create_stats && !this.snapid); // || (this.options.Axis > 0);
    }
@@ -1665,7 +1610,7 @@ class THistPainter extends ObjectPainter {
          if ((this.options.minimum === kNoZoom) && (this.options.maximum === kNoZoom)) return false;
          if (!this.draw_content) return false; // if not drawing content, not change min/max
          this.options.minimum = this.options.maximum = kNoZoom;
-         this.scanContent(); // to reset ymin/ymax
+         this.scanContent(true); // to reset ymin/ymax
          return true;
       };
 
@@ -1781,27 +1726,25 @@ class THistPainter extends ObjectPainter {
          if (this.getDimension() === 1)
             menu.add('User range X', () => this.changeUserRange(menu, 'X'));
           else {
-            menu.sub('User ranges');
+            menu.add('sub:User ranges');
             menu.add('X', () => this.changeUserRange(menu, 'X'));
             menu.add('Y', () => this.changeUserRange(menu, 'Y'));
             if (this.getDimension() > 2)
                menu.add('Z', () => this.changeUserRange(menu, 'Z'));
             else
                menu.add('Values', () => this.changeValuesRange(menu));
-            menu.endsub();
+            menu.add('endsub:');
          }
 
          if (isFunc(this.fillHistContextMenu))
             this.fillHistContextMenu(menu);
-
-         menu.addRedrawMenu(this.getPrimary());
       }
 
       if (this.options.Mode3D) {
          // menu for 3D drawings
 
          if (menu.size() > 0)
-            menu.separator();
+            menu.add('separator');
 
          const main = this.getMainPainter() || this;
 
@@ -1848,7 +1791,7 @@ class THistPainter extends ObjectPainter {
          menu.add('Let update zoom', () => fp.zoomChangedInteractive('reset'));
    }
 
-   /** @summary Returns snap id for object or sub-element
+   /** @summary Returns snap id for object or subelement
      * @private */
    getSnapId(subelem) {
       if (!this.snapid)
@@ -1939,9 +1882,7 @@ class THistPainter extends ObjectPainter {
    /** @summary Create contour object for histogram */
    createContour(nlevels, zmin, zmax, zminpositive, custom_levels) {
       const cntr = new HistContour(zmin, zmax),
-            ndim = this.getDimension(),
-            is_th2poly = this.isTH2Poly(),
-            fp = this.getFramePainter();
+            ndim = this.getDimension();
 
       if (custom_levels)
          cntr.createCustom(custom_levels);
@@ -1953,8 +1894,9 @@ class THistPainter extends ObjectPainter {
          cntr.createNormal(nlevels, logv ?? 0, zminpositive);
       }
 
-      cntr.configIndicies(this.options.Zero && !is_th2poly ? -1 : 0, (cntr.colzmin !== 0) || !this.options.Zero || is_th2poly ? 0 : -1);
+      cntr.configIndicies(this.options.Zero ? -1 : 0, (cntr.colzmin !== 0) || !this.options.Zero || this.isTH2Poly() ? 0 : -1);
 
+      const fp = this.getFramePainter();
       if (fp && (ndim < 3) && !fp.mode3d) {
          fp.zmin = cntr.colzmin;
          fp.zmax = cntr.colzmax;
@@ -1979,7 +1921,7 @@ class THistPainter extends ObjectPainter {
 
       // if not initialized, first create contour array
       // difference from ROOT - fContour includes also last element with maxbin, which makes easier to build logz
-      // when no same0 draw option specified, use main painter for creating contour, also ignore scatter drawing for main painter
+      // when no same0 draw option specified, use main painter for creating contour, also ignore scatter drawing for main painer
       const histo = this.getObject(),
             src = (this !== main) && (main?.minbin !== undefined) && !this.options.IgnoreMainScale && !main?.tt_handle?.ScatterPlot ? main : this;
       let nlevels = 0, apply_min,
@@ -1991,16 +1933,15 @@ class THistPainter extends ObjectPainter {
       if (this.options.minimum !== kNoZoom) { zmin = this.options.minimum; gzmin = Math.min(gzmin, zmin); apply_min = true; }
       if (this.options.maximum !== kNoZoom) { zmax = this.options.maximum; gzmax = Math.max(gzmax, zmax); apply_min = false; }
       if (zmin >= zmax) {
-         if (apply_min || !zmin)
+         if (apply_min)
             zmax = zmin + 1;
          else
             zmin = zmax - 1;
       }
 
-      if (fp?.zoomChangedInteractive('z')) {
-         const mod = (fp.zoom_zmin !== fp.zoom_zmax);
-         zmin = mod ? fp.zoom_zmin : gzmin;
-         zmax = mod ? fp.zoom_zmax : gzmax;
+      if (fp && (fp.zoom_zmin !== fp.zoom_zmax)) {
+         zmin = fp.zoom_zmin;
+         zmax = fp.zoom_zmax;
       }
 
       if (histo.fContour?.length > 1) {
@@ -2020,7 +1961,7 @@ class THistPainter extends ObjectPainter {
             fp.zoom_zmin = cntr.colzmin;
             fp.zoom_zmax = cntr.colzmax;
          } else
-            fp.zoom_zmin = fp.zoom_zmax = 0;
+            fp.zoom_zmin = fp.zoom_zmax = undefined;
       }
 
       return cntr;
@@ -2121,10 +2062,10 @@ class THistPainter extends ObjectPainter {
          pal.$can_move = true;
          pal.$generated = true;
 
-         if (this.options.Zvert)
-            Object.assign(pal, { fX1NDC: 1.005 - gStyle.fPadRightMargin, fX2NDC: 1.045 - gStyle.fPadRightMargin, fY1NDC: gStyle.fPadBottomMargin, fY2NDC: 1 - gStyle.fPadTopMargin });
-         else
+         if (!this.options.Zvert)
             Object.assign(pal, { fX1NDC: gStyle.fPadLeftMargin, fX2NDC: 1 - gStyle.fPadRightMargin, fY1NDC: 1.005 - gStyle.fPadTopMargin, fY2NDC: 1.045 - gStyle.fPadTopMargin });
+         else
+            Object.assign(pal, { fX1NDC: 1.005 - gStyle.fPadRightMargin, fX2NDC: 1.045 - gStyle.fPadRightMargin, fY1NDC: gStyle.fPadBottomMargin, fY2NDC: 1 - gStyle.fPadTopMargin });
 
          Object.assign(pal.fAxis, { fChopt: '+', fLineSyle: 1, fLineWidth: 1, fTextAngle: 0, fTextAlign: 11 });
 
@@ -2172,7 +2113,7 @@ class THistPainter extends ObjectPainter {
 
             pal.fX1NDC = fp.fX1NDC;
             pal.fX2NDC = fp.fX2NDC;
-            if (pal.fY2NDC > (fp.fY1NDC + fp.fY2NDC) * 0.5) {
+            if (pal.fY2NDC > (fp.fY1NDC + fp.fY2NDC)*0.5) {
                pal.fY2NDC = fp.fY2NDC + 0.005 + (pal.fY2NDC - pal.fY1NDC);
                pal.fY1NDC = fp.fY2NDC + 0.005;
             } else {
@@ -2193,8 +2134,10 @@ class THistPainter extends ObjectPainter {
 
       if (!pal_painter) {
          // when histogram drawn on sub pad, let draw new axis object on the same pad
-         pr = TPavePainter.draw(pp, pal, arg).then(_palp => {
+         const prev = this.selectCurrentPad(this.getPadName());
+         pr = TPavePainter.draw(this.getDom(), pal, arg).then(_palp => {
             pal_painter = _palp;
+            this.selectCurrentPad(prev);
             pal_painter.setSecondaryId(this, found_in_func && !pal.$generated ? `func_${pal.fName}` : undefined);
          });
       } else {
@@ -2222,13 +2165,11 @@ class THistPainter extends ObjectPainter {
                   need_redraw = true;
                   fp.fX2NDC = pal.fX1NDC - 0.01;
 
-                  if (fp.fX1NDC > fp.fX2NDC - 0.1)
-                     fp.fX1NDC = Math.max(0, fp.fX2NDC - 0.1);
+                  if (fp.fX1NDC > fp.fX2NDC - 0.1) fp.fX1NDC = Math.max(0, fp.fX2NDC - 0.1);
                 } else if ((pal.fX2NDC < 0.5) && (fp.fX1NDC < pal.fX2NDC)) {
                   need_redraw = true;
                   fp.fX1NDC = pal.fX2NDC + 0.05;
-                  if (fp.fX2NDC < fp.fX1NDC + 0.1)
-                     fp.fX2NDC = Math.min(1, fp.fX1NDC + 0.1);
+                  if (fp.fX2NDC < fp.fX1NDC + 0.1) fp.fX2NDC = Math.min(1, fp.fX1NDC + 0.1);
                 }
                 if (need_redraw && pad) {
                    pad.fLeftMargin = fp.fX1NDC;
@@ -2238,13 +2179,11 @@ class THistPainter extends ObjectPainter {
                if ((pal.fY1NDC > 0.5) && (fp.fY2NDC > pal.fY1NDC)) {
                   need_redraw = true;
                   fp.fY2NDC = pal.fY1NDC - 0.01;
-                  if (fp.fY1NDC > fp.fY2NDC - 0.1)
-                     fp.fY1NDC = Math.max(0, fp.fXYNDC - 0.1);
+                  if (fp.fY1NDC > fp.fY2NDC - 0.1) fp.fY1NDC = Math.max(0, fp.fXYNDC - 0.1);
                } else if ((pal.fY2NDC < 0.5) && (fp.fY1NDC < pal.fY2NDC)) {
                   need_redraw = true;
                   fp.fY1NDC = pal.fY2NDC + 0.05;
-                  if (fp.fXYNDC < fp.fY1NDC + 0.1)
-                     fp.fY2NDC = Math.min(1, fp.fY1NDC + 0.1);
+                  if (fp.fXYNDC < fp.fY1NDC + 0.1) fp.fY2NDC = Math.min(1, fp.fY1NDC + 0.1);
                }
                if (need_redraw && pad) {
                   pad.fTopMargin = fp.fY1NDC;
@@ -2316,7 +2255,7 @@ class THistPainter extends ObjectPainter {
             };
 
       if (args.cutg) {
-         // if using cutg - define rectangular region
+         // if using cutg - define rectengular region
          let i1 = res.i2, i2 = res.i1, j1 = res.j2, j2 = res.j1;
          for (let ii = res.i1; ii < res.i2; ++ii) {
             for (let jj = res.j1; jj < res.j2; ++jj) {

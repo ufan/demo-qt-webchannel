@@ -28,7 +28,7 @@ class TF2Painter extends TH2Painter {
    getPrimaryObject() { return this.$func; }
 
    /** @summary Update histogram */
-   updateObject(obj /* , opt */) {
+   updateObject(obj /*, opt */) {
       if (!obj || (this.getClassName() !== obj._typename)) return false;
       delete obj.evalPar;
       const histo = this.getHisto();
@@ -223,7 +223,7 @@ class TF2Painter extends TH2Painter {
       }
    }
 
-   /** @summary return tooltips for TF2 */
+   /** @summary retrurn tooltips for TF2 */
    getTF2Tooltips(pnt) {
       const lines = [this.getObjectHint()],
             funcs = this.getFramePainter()?.getGrFuncs(this.options.second_x, this.options.second_y);
@@ -279,16 +279,15 @@ class TF2Painter extends TH2Painter {
          }
 
          ttrect.attr('cx', pnt.x)
-               .attr('cy', pnt.y);
-         if (this.lineatt)
-            ttrect.call(this.lineatt.func);
+               .attr('cy', pnt.y)
+               .call(this.lineatt?.func);
       }
 
       return res;
    }
 
    /** @summary fill information for TWebCanvas
-     * @desc Used to inform web canvas when evaluation failed
+    * @desc Used to inform webcanvas when evaluation failed
      * @private */
    fillWebObjectOptions(opt) {
       opt.fcust = this._fail_eval && !this.use_saved ? 'func_fail' : '';

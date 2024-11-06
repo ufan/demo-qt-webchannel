@@ -69,7 +69,7 @@ class TF1Painter extends TH1Painter {
    getPrimaryObject() { return this.$func; }
 
    /** @summary Update function */
-   updateObject(obj /* , opt */) {
+   updateObject(obj /*, opt */) {
       if (!obj || (this.getClassName() !== obj._typename)) return false;
       delete obj.evalPar;
       const histo = this.getHisto();
@@ -179,6 +179,7 @@ class TF1Painter extends TH1Painter {
          xmax = tf1.fSave[np + 2];
 
          if (xmin === xmax) {
+            // xmin = tf1.fSave[np];
             const mp = this.getMainPainter();
             if (isFunc(mp?.getHisto))
                custom_xaxis = mp?.getHisto()?.fXaxis;
@@ -253,7 +254,7 @@ class TF1Painter extends TH1Painter {
       return (axis === 'x') || (axis === 'y');
    }
 
-      /** @summary return tooltips for TF2 */
+      /** @summary retrurn tooltips for TF2 */
    getTF1Tooltips(pnt) {
       delete this.$tmp_tooltip;
       const lines = [this.getObjectHint()],
@@ -312,16 +313,15 @@ class TF1Painter extends TH1Painter {
          }
 
          ttrect.attr('cx', pnt.x)
-               .attr('cy', this.$tmp_tooltip.gry ?? pnt.y);
-         if (this.lineatt)
-            ttrect.call(this.lineatt.func);
+               .attr('cy', this.$tmp_tooltip.gry ?? pnt.y)
+               .call(this.lineatt?.func);
       }
 
       return res;
    }
 
    /** @summary fill information for TWebCanvas
-    * @desc Used to inform web canvas when evaluation failed
+    * @desc Used to inform webcanvas when evaluation failed
      * @private */
    fillWebObjectOptions(opt) {
       opt.fcust = this._fail_eval && !this.use_saved ? 'func_fail' : '';

@@ -4,21 +4,13 @@
       <meta charset="utf-8">
       <title>Read a ROOT file</title>
       <link rel="shortcut icon" href="img/RootIcon.ico"/>
-      <script type="importmap">
-         {
-            "imports": {
-               "jsroot": "./modules/main.mjs"
-            }
-         }
-      </script>
-
    </head>
    <body>
       <div id="simpleGUI" path="../files/" files="ct.root;exclusion.root;fillrandom.root;glbox.root;graph.root;hsimple.root;legends.root;rf107.root;stacks.root;zdemo.root">
-         loading modules ...
+         loading scripts ...
       </div>
       <script type="module">
-         import { buildGUI } from 'jsroot';
+         import { buildGUI } from './modules/gui.mjs';
          buildGUI('simpleGUI');
       </script>
    </body>

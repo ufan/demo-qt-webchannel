@@ -1,0 +1,141 @@
+{
+  "name": "jsroot",
+  "version": "7.7.5",
+  "engines": {
+    "node": ">= 0.18.0"
+  },
+  "description": "JavaScript ROOT",
+  "homepage": "https://root.cern/js/",
+  "type": "module",
+  "main": "./build/jsroot.js",
+  "module": "./modules/main.mjs",
+  "types": "./types.d.ts",
+  "exports": {
+    ".": {
+      "import": "./modules/main.mjs",
+      "require": "./build/jsroot.js",
+      "types": "./types.d.ts"
+    },
+    "./core": "./modules/core.mjs",
+    "./draw": "./modules/draw.mjs",
+    "./io": "./modules/io.mjs",
+    "./tree": "./modules/tree.mjs",
+    "./colors": "./modules/base/colors.mjs",
+    "./hierarchy": "./modules/gui/HierarchyPainter.mjs",
+    "./latex": "./modules/base/latex.mjs",
+    "./geom": "./modules/geom/TGeoPainter.mjs",
+    "./testing": "./modules/testing.mjs"
+  },
+  "contributors": [
+    {
+      "name": "Bertrand Bellenot",
+      "email": "bertrand.bellenot@cern.ch"
+    },
+    {
+      "name": "Sergey Linev",
+      "email": "s.linev@gsi.de"
+    }
+  ],
+  "dependencies": {
+    "@oneidentity/zstd-js": "^1.0.3",
+    "canvas": "^2.11.2",
+    "gl": "^8.0.2",
+    "jsdom": "^22.1.0",
+    "mathjax": "3.2.2",
+    "tmp": "^0.2.1",
+    "xhr2": "^0.2.1",
+    "cssesc": "^3.0.0",
+    "font-family-papandreou": "^0.2.0-patch1",
+    "svgpath": "^2.3.0",
+    "specificity": "^0.4.1",
+    "@babel/runtime": "^7.14.0",
+    "atob": "^2.1.2",
+    "btoa": "^1.2.1",
+    "fflate": "^0.4.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/root-project/jsroot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/root-project/jsroot/issues"
+  },
+  "license": "MIT",
+  "author": "linev",
+  "files": [
+    "modules/*",
+    "scripts/*",
+    "fonts/*",
+    "build/*",
+    "types.d.ts",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@rollup/plugin-json": "6",
+    "@rollup/plugin-node-resolve": "15",
+    "@rollup/plugin-terser": "0",
+    "docdash": "^2.0.2",
+    "eslint": "^8.57.0",
+    "eslint-config-semistandard": "^17.0.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.28.1",
+    "eslint-plugin-n": "^15.7.0",
+    "eslint-plugin-promise": "^6.1.1",
+    "jsdoc": "^4.0.2",
+    "magic-string": "^0.30.0",
+    "mocha": "9",
+    "rollup": "3.29.5",
+    "rollup-plugin-ascii": "0.0",
+    "rollup-plugin-ignore": "1.0.10",
+    "rollup-plugin-modify": "^3.0.0"
+  },
+  "scripts": {
+    "build": "rollup -c build/rollup.config.js",
+    "doc": "jsdoc -c docs/jsdoc.json -R docs/main.md  && jsdoc -c docs/jsdoc.json -p -d docs/jsdocfull -R docs/main.md",
+    "check": "eslint modules/*.mjs modules/*/*.mjs"
+  },
+  "keywords": [
+    "ROOT",
+    "interactive",
+    "svg",
+    "webgl",
+    "THttpServer"
+  ],
+  "browser": {
+    "fs": false,
+    "crypto": false,
+    "@oneidentity/zstd-js": false,
+    "zlib": false,
+    "stream": false,
+    "url": false,
+    "path": false,
+    "util": false,
+    "http": false,
+    "https": false,
+    "os": false,
+    "net": false,
+    "tls": false,
+    "assert": false,
+    "atob": false,
+    "btoa": false,
+    "canvas": false,
+    "gl": false,
+    "jsdom": false,
+    "mathjax": false,
+    "tmp": false,
+    "xhr": false,
+    "xhr2": false,
+    "child_process": false,
+    "cssesc": false,
+    "font-family-papandreou": false,
+    "svgpath": false,
+    "specificity": false,
+    "@babel/runtime": false,
+    "fflate": false,
+    "canvg": false,
+    "html2canvas": false,
+    "core-js": false,
+    "dompurify": false
+
+  }
+}

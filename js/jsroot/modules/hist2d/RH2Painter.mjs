@@ -80,7 +80,7 @@ class RH2Painter extends RHistPainter {
       this.provideSpecialDrawArea(new_proj).then(() => { this.is_projection = new_proj; return this.redrawProjection(); });
    }
 
-   /** @summary Redraw projections */
+   /** @summary Readraw projections */
    redrawProjection(/* ii1, ii2, jj1, jj2 */) {
       // do nothing for the moment
       // if (!this.is_projection) return;
@@ -108,10 +108,10 @@ class RH2Painter extends RHistPainter {
          const kinds = ['X1', 'X2', 'X3', 'X5', 'X10', 'Y1', 'Y2', 'Y3', 'Y5', 'Y10', 'XY1', 'XY2', 'XY3', 'XY5', 'XY10'];
          if (kind) kinds.unshift('Off');
 
-         menu.sub('Projections', () => menu.input('Input projection kind X1 or XY2 or X3_Y4', kind, 'string').then(val => this.toggleProjection(val)));
+         menu.add('sub:Projections', () => menu.input('Input projection kind X1 or XY2 or X3_Y4', kind, 'string').then(val => this.toggleProjection(val)));
          for (let k = 0; k < kinds.length; ++k)
             menu.addchk(kind === kinds[k], kinds[k], kinds[k], arg => this.toggleProjection(arg));
-         menu.endsub();
+         menu.add('endsub:');
       }
 
       menu.add('Auto zoom-in', () => this.autoZoom());
@@ -183,7 +183,7 @@ class RH2Painter extends RHistPainter {
          for (let j = j1; j < j2; ++j)
             min = Math.min(min, histo.getBinContent(i+1, j+1));
       }
-      if (min > 0) return; // if all points positive, no chance for auto-scale
+      if (min > 0) return; // if all points positive, no chance for autoscale
 
       let ileft = i2, iright = i1, jleft = j2, jright = j1;
 
@@ -221,7 +221,7 @@ class RH2Painter extends RHistPainter {
 
    /** @summary Scan content of 2-dim histogram */
    scanContent(when_axis_changed) {
-      // no need to re-scan histogram while result does not depend from axis selection
+      // no need to rescan histogram while result does not depend from axis selection
       if (when_axis_changed && this.nbinsx && this.nbinsy) return;
 
       const histo = this.getHisto();
@@ -316,8 +316,8 @@ class RH2Painter extends RHistPainter {
       return res;
    }
 
-   /** @summary Fill statistic into statistic box */
-   fillStatistic(stat, dostat /* , dofit */) {
+   /** @summary Fill statistic into statbox */
+   fillStatistic(stat, dostat /*, dofit */) {
       const data = this.countStat(),
           print_name = Math.floor(dostat % 10),
           print_entries = Math.floor(dostat / 10) % 10,
@@ -433,8 +433,8 @@ class RH2Painter extends RHistPainter {
          if (entry) {
             this.draw_g
                 .append('svg:path')
-                .attr('d', entry.path)
-                .style('fill', handle.palette.getColor(colindx));
+                .style('fill', handle.palette.getColor(colindx))
+                .attr('d', entry.path);
          }
       });
 
@@ -517,16 +517,15 @@ class RH2Painter extends RHistPainter {
       return handle;
    }
 
-   /** @summary Create poly bin */
+   /** @summary Create polybin */
    createPolyBin() {
       // see how TH2Painter is implemented
       return '';
    }
 
    /** @summary Draw RH2 bins as text */
-   async drawBinsText(handle) {
-      if (!handle)
-         handle = this.prepareDraw({ rounding: false });
+   drawBinsText(handle) {
+      if (handle === null) handle = this.prepareDraw({ rounding: false });
 
       const histo = this.getHisto(),
             textFont = this.v7EvalFont('text', { size: 20, color: 'black', align: 22 }),
@@ -534,42 +533,42 @@ class RH2Painter extends RHistPainter {
             text_g = this.draw_g.append('svg:g').attr('class', 'th2_text'),
             di = handle.stepi, dj = handle.stepj,
             profile2d = false;
+      let i, j, binz, binw, binh, text, x, y, width, height;
 
-      return this.startTextDrawingAsync(textFont, 'font', text_g).then(() => {
-         for (let i = handle.i1; i < handle.i2; i += di) {
-            for (let j = handle.j1; j < handle.j2; j += dj) {
-               let binz = histo.getBinContent(i+1, j+1);
-               if ((binz === 0) && !this._show_empty_bins) continue;
+      this.startTextDrawing(textFont, 'font', text_g);
 
-               const binw = handle.grx[i+di] - handle.grx[i],
-                     binh = handle.gry[j] - handle.gry[j+dj];
+      for (i = handle.i1; i < handle.i2; i += di) {
+         for (j = handle.j1; j < handle.j2; j += dj) {
+            binz = histo.getBinContent(i+1, j+1);
+            if ((binz === 0) && !this._show_empty_bins) continue;
 
-               if (profile2d)
-                  binz = histo.getBinEntries(i+1, j+1);
+            binw = handle.grx[i+di] - handle.grx[i];
+            binh = handle.gry[j] - handle.gry[j+dj];
 
-               const text = (binz === Math.round(binz)) ? binz.toString() : floatToString(binz, gStyle.fPaintTextFormat);
+            if (profile2d)
+               binz = histo.getBinEntries(i+1, j+1);
 
-               let x, y, width, height;
+            text = (binz === Math.round(binz)) ? binz.toString() : floatToString(binz, gStyle.fPaintTextFormat);
 
-               if (textFont.angle) {
-                  x = Math.round(handle.grx[i] + binw*0.5);
-                  y = Math.round(handle.gry[j+dj] + binh*(0.5 + text_offset));
-                  width = height = 0;
-               } else {
-                  x = Math.round(handle.grx[i] + binw*0.1);
-                  y = Math.round(handle.gry[j+dj] + binh*(0.1 + text_offset));
-                  width = Math.round(binw*0.8);
-                  height = Math.round(binh*0.8);
-               }
-
-               this.drawText({ align: 22, x, y, width, height, text, latex: 0, draw_g: text_g });
+            if (textFont.angle) {
+               x = Math.round(handle.grx[i] + binw*0.5);
+               y = Math.round(handle.gry[j+dj] + binh*(0.5 + text_offset));
+               width = height = 0;
+            } else {
+               x = Math.round(handle.grx[i] + binw*0.1);
+               y = Math.round(handle.gry[j+dj] + binh*(0.1 + text_offset));
+               width = Math.round(binw*0.8);
+               height = Math.round(binh*0.8);
             }
+
+            this.drawText({ align: 22, x, y, width, height, text, latex: 0, draw_g: text_g });
          }
+      }
 
+      return this.finishTextDrawing(text_g, true).then(() => {
          handle.hide_only_zeros = true; // text drawing suppress only zeros
-
-         return this.finishTextDrawing(text_g, true);
-      }).then(() => handle);
+         return handle;
+      });
    }
 
    /** @summary Draw RH2 bins as arrows */
@@ -730,14 +729,14 @@ class RH2Painter extends RHistPainter {
          this.draw_g.append('svg:path')
                     .attr('d', btn1)
                     .call(this.fillatt.func)
-                    .style('fill', d3_rgb(this.fillatt.color).brighter(0.5).formatRgb());
+                    .style('fill', d3_rgb(this.fillatt.color).brighter(0.5).formatHex());
       }
 
       if (btn2) {
          this.draw_g.append('svg:path')
                     .attr('d', btn2)
                     .call(this.fillatt.func)
-                    .style('fill', !this.fillatt.hasColor() ? 'red' : d3_rgb(this.fillatt.color).darker(0.5).formatRgb());
+                    .style('fill', !this.fillatt.hasColor() ? 'red' : d3_rgb(this.fillatt.color).darker(0.5).formatHex());
       }
 
       if (cross) {
@@ -796,6 +795,8 @@ class RH2Painter extends RHistPainter {
 
       // limit filling factor, do not try to produce as many points as filled area;
       if (this.maxbin > 0.7) factor = 0.7/this.maxbin;
+
+      // let nlevels = Math.round(handle.max - handle.min);
 
       // now start build
       for (i = handle.i1; i < handle.i2; i += di) {
@@ -902,6 +903,8 @@ class RH2Painter extends RHistPainter {
             rect = pmain.getFrameRect(),
             funcs = pmain.getGrFuncs(this.options.second_x, this.options.second_y);
       let handle = null, pr = null;
+
+      // if (this.lineatt.empty()) this.lineatt.color = 'cyan';
 
       if (this.options.Scat)
          handle = this.drawBinsScatter();
@@ -1147,8 +1150,8 @@ class RH2Painter extends RHistPainter {
                              FrontBox: false, BackBox: false };
 
          const kind = painter.v7EvalAttr('kind', ''),
-               sub = painter.v7EvalAttr('sub', 0),
-               o = painter.options;
+             sub = painter.v7EvalAttr('sub', 0),
+             o = painter.options;
 
          o.Text = painter.v7EvalAttr('drawtext', false);
 
