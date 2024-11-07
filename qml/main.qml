@@ -6,7 +6,7 @@ import jianwei.com
 
 ApplicationWindow {
     id: app
-    height: 1000
+    height: 1100
     width: 700
     visible: true
 
@@ -42,14 +42,14 @@ ApplicationWindow {
         text: "generateH1"
         anchors.left: webview1.right
         anchors.right: parent.right
-        anchors.top: parent.top
+        anchors.bottom: webview1.bottom
         onClicked: datasource.generateRandomDataH1()
     }
     Button {
         text: "generateH2"
         anchors.left: webview2.right
         anchors.right: parent.right
-        anchors.bottom: parent.bottom
+        anchors.bottom: webview2.bottom
         onClicked: datasource.generateRandomDataH2()
     }
 }
